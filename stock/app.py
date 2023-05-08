@@ -1,8 +1,9 @@
 import os
 import atexit
 
-from flask import Flask abort
+from flask import Flask, abort
 import redis
+import json
 
 
 app = Flask("stock-service")

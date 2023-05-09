@@ -73,8 +73,6 @@ def add_item(order_id, item_id):
 
 
 
-
-
 @app.delete('/removeItem/<order_id>/<item_id>')
 def remove_item(order_id, item_id):
     if not db.exists(order_id):

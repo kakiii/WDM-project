@@ -30,10 +30,12 @@ def create_user():
 
     db.set(user["user_id"], json.dumps(user))
 
-    return {
-        "CODE": 200,
-        **user
-    }
+    response = app.response_class(
+        response=json.dumps(user),
+        status=200,
+        mimetype='application/json'
+    )
+    return response
 
 
 @app.get('/find_user/<user_id>')
@@ -46,7 +48,13 @@ def find_user(user_id: str):
     user_found = json.loads(db.get(user_id))
     
     # return the user information using dictionary unpacking
-    return {"CODE": 200, **user_found}
+    response = app.response_class(
+        response=json.dumps(user_found),
+        status=200,
+        mimetype='application/json'
+    )
+    return response
+    # return {"CODE": 200, **user_found}
 
 
 @app.post('/add_funds/<user_id>/<amount>')
@@ -65,7 +73,13 @@ def add_credit(user_id: str, amount: int):
     db.set(user_found["user_id"], json.dumps(user_found))
 
     # return the user information using dictionary unpacking
-    return {"CODE": 200, **user_found}
+    response = app.response_class(
+        response=json.dumps(user_found),
+        status=200,
+        mimetype='application/json'
+    )
+    return response
+    # return {"status_code": 200, **user_found}
 
 
 ### Do i need to check that this order id belongs to the user id?
@@ -101,8 +115,16 @@ def remove_credit(user_id: str, order_id: str, amount: int):
     order_found["paid"] = True
     db.set(order_found["order_id"], json.dumps(order_found))
 
+    data = user_found.update(order_found)
+
     # return the user information using dictionary unpacking
-    return {"CODE": 200, **user_found, **order_found}
+    response = app.response_class(
+        response=json.dumps(data),
+        status=200,
+        mimetype='application/json'
+    )
+    return response
+    # return {"CODE": 200, **user_found, **order_found}
 
 
 @app.post('/cancel/<user_id>/<order_id>')

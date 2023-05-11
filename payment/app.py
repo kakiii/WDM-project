@@ -111,8 +111,17 @@ def remove_credit(user_id: str, order_id: str, amount: int):
 
     # retrieve the order from the database
     order_found = json.loads(db.get(order_id))
+    
+    # Amount > total cost -> Fail
+    if float(amount) > (float(order_found["total_cost"])- float(order_found["paid_amount"])):
+        abort(400, description=f"{amount} paid is more than required")
 
-    order_found["paid"] = True
+    # add paid amount
+    order_found["paid_amount"] = float(order_found["paid_amount"]) + float(amount)
+
+    if order_found["paid_amount"] == order_found["total_cost"]:
+        order_found["payment_status"] = "Completed"
+
     db.set(order_found["order_id"], json.dumps(order_found))
 
     data = user_found.update(order_found)

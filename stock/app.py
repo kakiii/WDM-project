@@ -24,9 +24,9 @@ atexit.register(close_db_connection)
 @app.post('/item/create/<price>')
 def create_item(price: int):
     item = {
-    "item_id": db.incr("item_id"),
-    "price": price,
-    "stock": 0
+        "item_id": db.incr("item_id"),
+        "price": price,
+        "stock": 0
     }
 
     db.set(item["item_id"], json.dumps(item))
@@ -61,7 +61,7 @@ def add_stock(item_id: str, amount: int):
     # return {"CODE": 200}
     # return {"status_code":200}
     response = app.response_class(
-        response="",
+        response=item_found,
         status=200,
         mimetype='application/json'
     )

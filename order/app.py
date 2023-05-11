@@ -4,7 +4,7 @@ import json
 import requests
 from collections import Counter
 
-from flask import Flask, abort
+from flask import Flask, abort, jsonify
 import redis
 
 
@@ -31,14 +31,23 @@ def create_order(user_id):
         "order_id": db.incr("order_id"),
         "user_id": user_id,
         "items": [],
-        "paid": False,
+        "payment_status": "Pending",
         "total_cost": 0,
+        "paid_amount": 0,
     }
     db.set(order["order_id"], json.dumps(order))
-    return {
-        "CODE": 200,
-        "order_id": order["order_id"],
-    }
+
+    response = app.response_class(
+            response= order,
+            status=200,
+            mimetype='application/json'
+        )
+    return jsonify(order), 200
+
+    # return {
+    #     "CODE": 200,
+    #     "order_id": order["order_id"],
+    # }
 
 
 
@@ -51,7 +60,12 @@ def remove_order(order_id):
     # delete the order from the database
     db.delete(order_id)
     
-    return {"CODE": 200}
+    response = app.response_class(
+            response= f"{order_id} order has been deleted",
+            status=200,
+            mimetype='application/json'
+        )
+    return f"{order_id} order has been deleted", 200
 
 
 
@@ -63,13 +77,21 @@ def add_item(order_id, item_id):
 
     order_found = json.loads(db.get(order_id))
     order_found["items"].append(item_id)
-    # db.set(order_id, json.dumps(order_found))
+
+    # Decrease item dict stock level? TODO:
+
+
     # update total cost
     item_price = requests.get(f"{gateway_url}/stock/find/{item_id}").json()["price"]
     order_found["total_cost"] += item_price
     db.set(order_id, json.dumps(order_found))
 
-    return {"CODE": 200}
+    response = app.response_class(
+            response=json.dumps(order_found),
+            status=200,
+            mimetype='application/json'
+        )
+    return response
 
 
 
@@ -87,7 +109,14 @@ def remove_item(order_id, item_id):
         item_price = requests.get(f"{gateway_url}/stock/find/{item_id}").json()["price"]
         order_found["total_cost"] -= item_price
         db.set(order_id, json.dumps(order_found))
-        return {"CODE": 200}
+
+        response = app.response_class(
+            response=json.dumps(order_found),
+            status=200,
+            mimetype='application/json'
+        )
+        return response
+
 
 
 @app.get('/find/<order_id>')
@@ -99,7 +128,12 @@ def find_order(order_id):
     order_found = json.loads(db.get(order_id))
     
     # return the order information using dictionary unpacking
-    return {"CODE": 200, **order_found}
+    response = app.response_class(
+            response=json.dumps(order_found),
+            status=200,
+            mimetype='application/json'
+        )
+    return response
 
 
 @app.post('/checkout/<order_id>')
@@ -141,6 +175,13 @@ def checkout(order_id):
             # update the order information    
             order_found["paid"] = True
             order_found["total_cost"] = total_cost
-            return {"CODE": 200, "status": "Order paid successfully"}
+
+            response = app.response_class(
+                response=json.dumps(order_found),
+                status=200,
+                mimetype='application/json'
+            )
+            return response
+            # return {"CODE": 200, "status": "Order paid successfully"}
     
 

@@ -42,6 +42,8 @@ def find_item(item_id: str):
         abort(404, description=f"Item with id {item_id} not found")    
     # retrieve the item from the database
     item_found = json.loads(db.get(item_id))
+    item_found["price"]= float(item_found["price"])
+    item_found["stock"]= int(item_found["stock"])
     # return the item information using dictionary unpacking
     return {"CODE": 200, **item_found}
     
@@ -53,9 +55,18 @@ def add_stock(item_id: str, amount: int):
     if not db.exists(item_id):
         abort(404, description=f"Item with id {item_id} not found")
     item_found = json.loads(db.get(item_id))
-    item_found["stock"] += amount
+    item_found["stock"] = int(item_found["stock"])
+    item_found["stock"] += int(amount)
     db.set(item_id, json.dumps(item_found))
-    return {"CODE": 200}
+    # return {"CODE": 200}
+    # return {"status_code":200}
+    response = app.response_class(
+        response="",
+        status=200,
+        mimetype='application/json'
+    )
+    return response
+    # return '', 200
 
 
 
@@ -65,10 +76,19 @@ def remove_stock(item_id: str, amount: int):
     if not db.exists(item_id):
         abort(404, description=f"Item with id {item_id} not found")
     item_found = json.loads(db.get(item_id))
-    if item_found["stock"] < amount:
+    item_found["stock"] = int(item_found["stock"])
+    if item_found["stock"] < int(amount):
         abort(404, description=f"Not enough stock for item with id {item_id}")
     else:
-        item_found["stock"] -= amount
+        item_found["stock"] -= int(amount)
         db.set(item_id, json.dumps(item_found))
-        return {"CODE": 200}
+        response = app.response_class(
+        response="",
+        status=200,
+        mimetype='application/json'
+    )
+    return response
+        # return {"CODE": 200}
+        # return {"status_code":200}
+        
 

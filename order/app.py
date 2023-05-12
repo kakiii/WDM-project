@@ -152,7 +152,7 @@ def checkout(order_id):
     for item_id, count in items_count.items():
         response = requests.get(f"{gateway_url}/stock/find/{item_id}")
         if response.status_code != 200:
-            abort(response.status_code, description=response.json()["message"])
+            abort(response.status_code, description=response.json())
         if response.json()["stock"] < count:
             checkout_possible = False
             break
@@ -165,7 +165,7 @@ def checkout(order_id):
         response = requests.post(f"{gateway_url}/payment/pay/{order_found['user_id']}/{order_id}/{total_cost}")
         if response.status_code != 200:
             # revert the stock information
-            abort(response.status_code, description=response.json()["message"])
+            abort(response.status_code, description=response.json())
         else:
             
             # update the stock information

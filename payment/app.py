@@ -4,10 +4,28 @@ import atexit
 from flask import Flask, abort
 import redis
 import json
+import sys
+import os
+import requests
 
+# setting path
+# sys.path.append('/path/to/parent/directory')
+# importing
+# import app as order_app
+# from WDM-project.order import app as order_app
+# from ..order import app as order_app
+# import importlib
+
+# module_name = "WDM-project.order.app"
+# order_app = importlib.import_module(module_name)
+
+# from ..order import app as order_app
+
+# # Access functions or classes from app.py
+# order_app.function_name()
 
 app = Flask("payment-service")
-
+gateway_url = os.environ['GATEWAY_URL']
 db: redis.Redis = redis.Redis(host=os.environ['REDIS_HOST'],
                               port=int(os.environ['REDIS_PORT']),
                               password=os.environ['REDIS_PASSWORD'],
@@ -92,9 +110,17 @@ def remove_credit(user_id: str, order_id: str, amount: int):
     # Check if user and order exists
     if not db.exists(user_id):
         abort(404, description=f"User with id {user_id} not found")
-    
-    if not db.exists(order_id):
-        abort(404, description=f"Order with id {order_id} not found")
+
+    response = requests.get(f"{gateway_url}/orders/find/{order_id}")
+
+    if response.status_code != 200:
+        abort(response.status_code, description=response.json()["message"])
+    else:
+        order_found = response.json()
+
+    # if order_app.find_order(order_id).status_code == 200:
+    # # if not db.exists(order_id):
+    #     abort(404, description=f"Order with id {order_id} not found")
 
     # retrieve the user from the database
     user_found = json.loads(db.get(user_id))
@@ -110,7 +136,8 @@ def remove_credit(user_id: str, order_id: str, amount: int):
     db.set(user_found["user_id"], json.dumps(user_found))
 
     # retrieve the order from the database
-    order_found = json.loads(db.get(order_id))
+    # Order is not found because it is not from the same database!!!!
+    # order_found = json.loads(db.get(order_id))
     
     # Amount > total cost -> Fail
     if float(amount) > (float(order_found["total_cost"])- float(order_found["paid_amount"])):

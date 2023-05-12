@@ -75,7 +75,7 @@ def add_item(order_id, item_id):
 
 
     # update total cost
-    item_price = requests.get(f"{gateway_url}/stock/find/{item_id}").json()["price"]
+    item_price = int(requests.get(f"{gateway_url}/stock/find/{item_id}").json()["price"])
     order_found["total_cost"] += item_price
     db.set(order_id, json.dumps(order_found))
 
@@ -99,7 +99,7 @@ def remove_item(order_id, item_id):
     else:
         order_found["items"].remove(item_id)
         # update total cost
-        item_price = requests.get(f"{gateway_url}/stock/find/{item_id}").json()["price"]
+        item_price = int(requests.get(f"{gateway_url}/stock/find/{item_id}").json()["price"])
         order_found["total_cost"] -= item_price
         db.set(order_id, json.dumps(order_found))
 

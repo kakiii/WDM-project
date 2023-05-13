@@ -1,28 +1,12 @@
 import os
 import atexit
 
-from flask import Flask, abort
+from flask import Flask, abort, jsonify
 import redis
 import json
 import sys
 import os
 import requests
-
-# setting path
-# sys.path.append('/path/to/parent/directory')
-# importing
-# import app as order_app
-# from WDM-project.order import app as order_app
-# from ..order import app as order_app
-# import importlib
-
-# module_name = "WDM-project.order.app"
-# order_app = importlib.import_module(module_name)
-
-# from ..order import app as order_app
-
-# # Access functions or classes from app.py
-# order_app.function_name()
 
 app = Flask("payment-service")
 gateway_url = os.environ['GATEWAY_URL']
@@ -48,12 +32,7 @@ def create_user():
 
     db.set(user["user_id"], json.dumps(user))
 
-    response = app.response_class(
-        response=json.dumps(user),
-        status=200,
-        mimetype='application/json'
-    )
-    return response
+    return jsonify(user), 200
 
 
 @app.get('/find_user/<user_id>')
@@ -66,13 +45,7 @@ def find_user(user_id: str):
     user_found = json.loads(db.get(user_id))
     
     # return the user information using dictionary unpacking
-    response = app.response_class(
-        response=json.dumps(user_found),
-        status=200,
-        mimetype='application/json'
-    )
-    return response
-    # return {"CODE": 200, **user_found}
+    return jsonify(user_found), 200
 
 
 @app.post('/add_funds/<user_id>/<amount>')
@@ -91,14 +64,7 @@ def add_credit(user_id: str, amount: int):
     db.set(user_found["user_id"], json.dumps(user_found))
 
     # return the user information using dictionary unpacking
-    response = app.response_class(
-        response=json.dumps(user_found),
-        status=200,
-        mimetype='application/json'
-    )
-    return response
-    # return {"status_code": 200, **user_found}
-
+    return jsonify(user_found), 200
 
 ### Do i need to check that this order id belongs to the user id?
 ### Why can i select an amount here? shouldnt the amount be equal to the order's total cost??
@@ -107,23 +73,20 @@ def add_credit(user_id: str, amount: int):
 ### Definitely wrong
 @app.post('/pay/<user_id>/<order_id>/<amount>')
 def remove_credit(user_id: str, order_id: str, amount: int):
-    # Check if user and order exists
+    # Check if user exists
     if not db.exists(user_id):
         abort(404, description=f"User with id {user_id} not found")
-
-    response = requests.get(f"{gateway_url}/orders/find/{order_id}")
-
-    if response.status_code != 200:
-        abort(response.status_code, description=response.json()["message"])
     else:
-        order_found = response.json()
+        # retrieve the user from the database
+        user_found = json.loads(db.get(user_id))
 
-    # if order_app.find_order(order_id).status_code == 200:
-    # # if not db.exists(order_id):
-    #     abort(404, description=f"Order with id {order_id} not found")
+    # Check if order exists
+    order_response = requests.get(f"{gateway_url}/orders/find/{order_id}")
 
-    # retrieve the user from the database
-    user_found = json.loads(db.get(user_id))
+    if order_response.status_code != 200:
+        abort(order_response.status_code, description=order_response.json()['message'])
+    else:
+        order_found = order_response.json()
 
     # Check if user has sufficient amount to deduct
     if float(user_found['credit']) < float(amount):
@@ -134,10 +97,6 @@ def remove_credit(user_id: str, order_id: str, amount: int):
 
     # Update the database
     db.set(user_found["user_id"], json.dumps(user_found))
-
-    # retrieve the order from the database
-    # Order is not found because it is not from the same database!!!!
-    # order_found = json.loads(db.get(order_id))
     
     # Amount > total cost -> Fail
     if float(amount) > (float(order_found["total_cost"])- float(order_found["paid_amount"])):
@@ -153,26 +112,47 @@ def remove_credit(user_id: str, order_id: str, amount: int):
 
     data = user_found.update(order_found)
 
-    # return the user information using dictionary unpacking
-    response = app.response_class(
-        response=json.dumps(data),
-        status=200,
-        mimetype='application/json'
-    )
-    return response
-    # return {"CODE": 200, **user_found, **order_found}
-
+    return jsonify(data), 200
 
 @app.post('/cancel/<user_id>/<order_id>')
 def cancel_payment(user_id: str, order_id: str):
     # Check if user and order exists
     if not db.exists(user_id):
         abort(404, description=f"User with id {user_id} not found")
+    else:
+        # retrieve the user from the database
+        user_found = json.loads(db.get(user_id))
     
-    if not db.exists(order_id):
-        abort(404, description=f"Order with id {order_id} not found")
-    pass
+    # Check if order exists
+    order_response = requests.get(f"{gateway_url}/orders/find/{order_id}")
+
+    if order_response.status_code != 200:
+        abort(order_response.status_code, description=order_response.json()['message'])
+    else:
+        order_found = order_response.json()
+    
+    # Refund money back to the user
+    user_found["credit"] += order_found["paid_amount"]
+    order_found["paid_amount"] = 0
+    order_found["payment_status"] = "Cancelled"
+
+    data = user_found.update(order_found)
+
+    return jsonify(data), 200
 
 @app.post('/status/<user_id>/<order_id>')
 def payment_status(user_id: str, order_id: str):
-    pass
+    # Check if order exists
+    order_response = requests.get(f"{gateway_url}/orders/find/{order_id}")
+
+    if order_response.status_code != 200:
+        abort(order_response.status_code, description=order_response.json()['message'])
+    else:
+        order_found = order_response.json()
+    
+    if int(order_found["user_id"]) != user_id:
+        abort(404, description=f"User with id {user_id} not found")
+    
+    return jsonify(order_found["payment_status"]), 200
+
+    

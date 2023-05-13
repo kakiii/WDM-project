@@ -131,50 +131,41 @@ def find_order(order_id):
 
 @app.post('/checkout/<order_id>')
 def checkout(order_id):
-    # check if the order exists
+    # Check if the order exists
     if not db.exists(order_id):
         abort(404, description=f"Order with id {order_id} not found")
     
-    # retrieve the order from the database
+    # Retrieve the order from the database
     order_found = json.loads(db.get(order_id))
+
+    if order_found["paid"]:
+        abort(400, description="Order has already been paid")
     
-    # transform list of items into a dictionary
+    # Transform list of items into a dictionary
     items_count = Counter(order_found["items"])
-    checkout_possible = True
-    # query the stock service to check if the items are available
+
+    # Query the stock service to check if the items are available
     for item_id, count in items_count.items():
         response = requests.get(f"{gateway_url}/stock/find/{item_id}")
         if response.status_code != 200:
-            abort(response.status_code, description=response.json())
+            abort(response.status_code, description=response.json()['message'])
         if response.json()["stock"] < count:
-            checkout_possible = False
-            break
-    
-    if not checkout_possible:
-        abort(400, description="Not enough stock for some items")
-    else:
-        # query payment service to check if the user has enough balance
-        total_cost = order_found["total_cost"]
-        response = requests.post(f"{gateway_url}/payment/pay/{order_found['user_id']}/{order_id}/{total_cost}")
-        if response.status_code != 200:
-            # revert the stock information
-            abort(response.status_code, description=response.json())
-        else:
-            
-            # update the stock information
-            for item_id, count in items_count.items():
-                requests.post(f"{gateway_url}/stock/remove/{item_id}/{count}")
+            abort(400, description="Not enough stock for some items")
 
-            # update the order information    
-            order_found["paid"] = True
-            order_found["total_cost"] = total_cost
+    # Query payment service to check if the user has enough balance
+    total_cost = order_found["total_cost"]
+    response = requests.post(f"{gateway_url}/payment/pay/{order_found['user_id']}/{order_id}/{total_cost}")
+    if response.status_code != 200:
+        abort(response.status_code, description="Payment failure")
 
-            response = app.response_class(
-                response=json.dumps(order_found),
-                status=200,
-                mimetype='application/json'
-            )
-            return response
-            # return {"CODE": 200, "status": "Order paid successfully"}
-    
+    # Update the stock information and order information    
+    for item_id, count in items_count.items():
+        requests.post(f"{gateway_url}/stock/remove/{item_id}/{count}")
+
+    order_found["paid"] = True
+    order_found["total_cost"] = total_cost
+    db.set(order_id, json.dumps(order_found))
+
+    return {"status": "success"}, 200
+
 

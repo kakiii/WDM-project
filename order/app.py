@@ -31,9 +31,8 @@ def create_order(user_id):
         "order_id": db.incr("order_id"),
         "user_id": user_id,
         "items": [],
-        "payment_status": "Pending",
+        "paid": False,
         "total_cost": 0,
-        "paid_amount": 0,
     }
     db.set(order["order_id"], json.dumps(order))
 
@@ -43,12 +42,6 @@ def create_order(user_id):
             mimetype='application/json'
         )
     return jsonify(order), 200
-
-    # return {
-    #     "CODE": 200,
-    #     "order_id": order["order_id"],
-    # }
-
 
 
 @app.delete('/remove/<order_id>')

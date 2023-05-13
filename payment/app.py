@@ -52,7 +52,8 @@ def find_user(user_id: str):
 def add_credit(user_id: str, amount: int):
     # Check if user exists
     if not db.exists(user_id):
-        abort(404, description=f"User with id {user_id} not found")
+        # abort(404, description=f"User with id {user_id} not found")
+        return jsonify({"done": False}), 404
     
     # retrieve the user from the database
     user_found = json.loads(db.get(user_id))
@@ -64,13 +65,9 @@ def add_credit(user_id: str, amount: int):
     db.set(user_found["user_id"], json.dumps(user_found))
 
     # return the user information using dictionary unpacking
-    return jsonify(user_found), 200
+    return jsonify({"done": True}), 200
 
 ### Do i need to check that this order id belongs to the user id?
-### Why can i select an amount here? shouldnt the amount be equal to the order's total cost??
-### Unless u can pay partially? which make senses
-
-### Definitely wrong
 @app.post('/pay/<user_id>/<order_id>/<amount>')
 def remove_credit(user_id: str, order_id: str, amount: int):
     # Check if user exists
@@ -85,8 +82,6 @@ def remove_credit(user_id: str, order_id: str, amount: int):
 
     if order_response.status_code != 200:
         abort(order_response.status_code, description=order_response.json()['message'])
-    else:
-        order_found = order_response.json()
 
     # Check if user has sufficient amount to deduct
     if float(user_found['credit']) < float(amount):
@@ -98,21 +93,7 @@ def remove_credit(user_id: str, order_id: str, amount: int):
     # Update the database
     db.set(user_found["user_id"], json.dumps(user_found))
     
-    # Amount > total cost -> Fail
-    if float(amount) > (float(order_found["total_cost"])- float(order_found["paid_amount"])):
-        abort(400, description=f"{amount} paid is more than required")
-
-    # add paid amount
-    order_found["paid_amount"] = float(order_found["paid_amount"]) + float(amount)
-
-    if order_found["paid_amount"] == order_found["total_cost"]:
-        order_found["payment_status"] = "Completed"
-
-    db.set(order_found["order_id"], json.dumps(order_found))
-
-    data = user_found.update(order_found)
-
-    return jsonify(data), 200
+    return jsonify(user_found), 200
 
 @app.post('/cancel/<user_id>/<order_id>')
 def cancel_payment(user_id: str, order_id: str):
@@ -132,9 +113,7 @@ def cancel_payment(user_id: str, order_id: str):
         order_found = order_response.json()
     
     # Refund money back to the user
-    user_found["credit"] += order_found["paid_amount"]
-    order_found["paid_amount"] = 0
-    order_found["payment_status"] = "Cancelled"
+    user_found["credit"] += order_found["total_cost"]
 
     data = user_found.update(order_found)
 
@@ -150,9 +129,9 @@ def payment_status(user_id: str, order_id: str):
     else:
         order_found = order_response.json()
     
-    if int(order_found["user_id"]) != user_id:
+    if order_found["user_id"] != user_id:
         abort(404, description=f"User with id {user_id} not found")
     
-    return jsonify(order_found["payment_status"]), 200
+    return jsonify({"paid": order_found["paid"]}), 200
 
     

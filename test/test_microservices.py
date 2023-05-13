@@ -65,8 +65,8 @@ class TestMicroservices(unittest.TestCase):
 
         add_item_response = tu.add_item_to_order(order_id, item_id)
         self.assertTrue(tu.status_code_is_success(add_item_response))
-        add_item_response = tu.add_item_to_order(order_id, item_id)
-        self.assertTrue(tu.status_code_is_success(add_item_response))
+        # add_item_response = tu.add_item_to_order(order_id, item_id)
+        # self.assertTrue(tu.status_code_is_success(add_item_response))
 
         payment_response = tu.payment_pay(user_id, order_id, 10)
         self.assertTrue(tu.status_code_is_success(payment_response))

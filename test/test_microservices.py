@@ -120,8 +120,9 @@ class TestMicroservices(unittest.TestCase):
         credit_after_payment: int = tu.find_user(user_id)['credit']
         self.assertEqual(credit_after_payment, 0)
 
-        checkout_response = tu.checkout_order(order_id).status_code
-        self.assertTrue(tu.status_code_is_failure(checkout_response))
+        checkout_response = tu.checkout_order(order_id)
+        print(checkout_response.content,"line 124")
+        self.assertTrue(tu.status_code_is_failure(checkout_response.status_code))
 
         add_credit_response = tu.add_credit_to_user(user_id, 15)
         self.assertTrue(tu.status_code_is_success(int(add_credit_response)))
@@ -132,8 +133,9 @@ class TestMicroservices(unittest.TestCase):
         stock: int = tu.find_item(item_id1)['stock']
         self.assertEqual(stock, 15)
 
-        checkout_response = tu.checkout_order(order_id).status_code
-        self.assertTrue(tu.status_code_is_success(checkout_response))
+        checkout_response = tu.checkout_order(order_id)
+        print("line 137 ", checkout_response.content)
+        self.assertTrue(tu.status_code_is_success(checkout_response.status_code))
 
         stock_after_subtract: int = tu.find_item(item_id1)['stock']
         self.assertEqual(stock_after_subtract, 14)

@@ -147,16 +147,20 @@ def checkout(order_id):
     # Query the stock service to check if the items are available
     for item_id, count in items_count.items():
         response = requests.get(f"{gateway_url}/stock/find/{item_id}")
-        if response.status_code != 200:
-            abort(response.status_code, description="Item not found")
         if response.json()["stock"] < count:
             abort(400, description=f"Not enough stock for item {item_id}")
 
     # Query payment service to check if the user has enough balance
-    total_cost = order_found["total_cost"]
-    with requests.post(f"{gateway_url}/payment/pay/{order_found['user_id']}/{order_id}/{total_cost}") as response:
-        if response.status_code != 200:
-            abort(response.status_code, description=str(response.content))
+    # total_cost = int(order_found["total_cost"])
+    if 'total_cost' not in order_found:
+        abort(400, description="Total cost not found")
+    response= requests.post(f"{gateway_url}/payment/pay/{order_found['user_id']}/{order_id}/{int(order_found['total_cost'])}")
+    if response.status_code >= 500:
+        abort(response.status_code, description=f"Payment service error with url {response.url}, order: {order_found}")
+    elif response.status_code >= 400:
+        abort(response.status_code, description=f"Not enough balance, order: {order_found}")
+    else:
+        print("Payment successful")
 
     # Update the stock information and order information    
     for item_id, count in items_count.items():

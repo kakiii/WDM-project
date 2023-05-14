@@ -148,22 +148,24 @@ def checkout(order_id):
     for item_id, count in items_count.items():
         response = requests.get(f"{gateway_url}/stock/find/{item_id}")
         if response.status_code != 200:
-            abort(response.status_code, description=response.json()['message'])
+            abort(response.status_code, description="Item not found")
         if response.json()["stock"] < count:
             abort(400, description="Not enough stock for some items")
 
     # Query payment service to check if the user has enough balance
     total_cost = order_found["total_cost"]
-    response = requests.post(f"{gateway_url}/payment/pay/{order_found['user_id']}/{order_id}/{total_cost}")
-    if response.status_code != 200:
-        abort(response.status_code, description="Payment failure")
+    with requests.post(f"{gateway_url}/payment/pay/{order_found['user_id']}/{total_cost}") as response:
+        if response.status_code != 200:
+            abort(response.status_code, description="Payment failed")
 
     # Update the stock information and order information    
     for item_id, count in items_count.items():
-        requests.post(f"{gateway_url}/stock/remove/{item_id}/{count}")
+        with requests.post(f"{gateway_url}/stock/subtract/{item_id}/{count}") as response:
+            if response.status_code != 200:
+                abort(response.status_code, description="Stock update failed")
 
     order_found["paid"] = True
-    order_found["total_cost"] = total_cost
+    # order_found["total_cost"] = total_cost
     db.set(order_id, json.dumps(order_found))
 
     return {"status": "success"}, 200

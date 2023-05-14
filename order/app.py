@@ -2,6 +2,7 @@ import os
 import atexit
 import json
 import requests
+from uuid import uuid4
 from collections import Counter
 
 from flask import Flask, abort, jsonify
@@ -26,9 +27,9 @@ atexit.register(close_db_connection)
 
 
 @app.post('/create/<user_id>')
-def create_order(user_id):
+def create_order(user_id:str):
     order= {
-        "order_id": db.incr("order_id"),
+        "order_id": str(uuid4()),
         "user_id": user_id,
         "items": [],
         "paid": False,
@@ -45,7 +46,7 @@ def create_order(user_id):
 
 
 @app.delete('/remove/<order_id>')
-def remove_order(order_id):
+def remove_order(order_id:str):
     # check if the order exists
     if not db.exists(order_id):
         abort(404, description=f"Order with id {order_id} not found")
@@ -63,7 +64,7 @@ def remove_order(order_id):
 
 
 @app.post('/addItem/<order_id>/<item_id>')
-def add_item(order_id, item_id):
+def add_item(order_id:str, item_id):
     # check if the order exists
     if not db.exists(order_id):
         abort(404, description=f"Order with id {order_id} not found")
@@ -113,7 +114,7 @@ def remove_item(order_id, item_id):
 
 
 @app.get('/find/<order_id>')
-def find_order(order_id):
+def find_order(order_id:str):
     # check if the order exists
     if not db.exists(order_id):
         abort(404, description=f"Order with id {order_id} not found")
@@ -130,7 +131,7 @@ def find_order(order_id):
 
 
 @app.post('/checkout/<order_id>')
-def checkout(order_id):
+def checkout(order_id:str):
     # Check if the order exists
     if not db.exists(order_id):
         abort(404, description=f"Order with id {order_id} not found")
@@ -139,39 +140,30 @@ def checkout(order_id):
     order_found = json.loads(db.get(order_id))
 
     if order_found["paid"]:
-        abort(400, description="Order has already been paid")
-    
-    # Transform list of items into a dictionary
+        return "Order has already been paid", 400
+
     items_count = Counter(order_found["items"])
 
-    # Query the stock service to check if the items are available
-    for item_id, count in items_count.items():
-        response = requests.get(f"{gateway_url}/stock/find/{item_id}")
-        if response.json()["stock"] < count:
-            abort(400, description=f"Not enough stock for item {item_id}")
+    resp = requests.post(f"{gateway_url}/stock/check/{order_id}", json=items_count)
 
-    # Query payment service to check if the user has enough balance
-    # total_cost = int(order_found["total_cost"])
-    if 'total_cost' not in order_found:
-        abort(400, description="Total cost not found")
-    response= requests.post(f"{gateway_url}/payment/pay/{order_found['user_id']}/{order_id}/{int(order_found['total_cost'])}")
-    if response.status_code >= 500:
-        abort(response.status_code, description=f"Payment service error with url {response.url}, order: {order_found}")
-    elif response.status_code >= 400:
-        abort(response.status_code, description=f"Not enough balance, order: {order_found}")
-    else:
-        print("Payment successful")
+    if resp.status_code != 200:
+        return "Stock check failed", 400
+    
+    # call payment service
+    user_id, amount = str(order_found["user_id"]), int(order_found["total_cost"])
+    resp = requests.post(f"{gateway_url}/payment/pay/{user_id}/{order_id}/{amount}")
+    if resp.status_code != 200:
+        abort(400, description="Payment failed")
 
-    # Update the stock information and order information    
-    for item_id, count in items_count.items():
-        with requests.post(f"{gateway_url}/stock/subtract/{item_id}/{count}") as response:
-            if response.status_code != 200:
-                abort(response.status_code, description="Stock update failed")
-
+    # update stocks in stock service
+    resp = requests.post(f"{gateway_url}/stock/update/{order_id}", json=items_count)
+    if resp.status_code != 200:
+        return "Stock update failed", 400
+    
+    # update order status
     order_found["paid"] = True
-    # order_found["total_cost"] = total_cost
     db.set(order_id, json.dumps(order_found))
 
-    return {"status": "success"}, 200
+    return f"Order {order_id} paid successfully", 200
 
 

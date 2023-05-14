@@ -1,10 +1,10 @@
 import os
 import atexit
 
-from flask import Flask, abort
+from flask import Flask, abort, request
 import redis
 import json
-
+from collections import Counter
 
 app = Flask("stock-service")
 
@@ -90,5 +90,27 @@ def remove_stock(item_id: str, amount: int):
     return response
         # return {"CODE": 200}
         # return {"status_code":200}
-        
+
+@app.post('/check/<order_id>')
+def check_stock(order_id: str):
+    # check if all thems are available
+    items = dict(request.json)
+
+    for item_id , item_num in items.items():
+        if not db.exists(item_id):
+            abort(404, description=f"Item with id {item_id} not found")
+        item_found = json.loads(db.get(item_id))
+        item_found["stock"] = int(item_found["stock"])
+        if item_found["stock"] < int(item_num):
+            abort(404, description=f"Not enough stock for item with id {item_id}")
+
+    return f"All items are available for order {order_id}"
+
+@app.post('/update/<order_id>')
+def remove_all_stocks(order_id):
+    items = dict(request.json)
+    for item_id , item_num in items.items():
+        remove_stock(item_id, item_num)
+    return f"Order {order_id} is completed"
+
 

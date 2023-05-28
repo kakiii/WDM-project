@@ -8,7 +8,7 @@ import requests
 
 
 app = Flask("stock-service")
-
+gateway_url = os.environ['GATEWAY_URL']
 db: redis.Redis = redis.Redis(host=os.environ['REDIS_HOST'],
                               port=int(os.environ['REDIS_PORT']),
                               password=os.environ['REDIS_PASSWORD'],
@@ -17,11 +17,7 @@ db: redis.Redis = redis.Redis(host=os.environ['REDIS_HOST'],
 
 def close_db_connection():
     db.close()
-
-
 atexit.register(close_db_connection)
-
-
 @app.post('/item/create/<price>')
 def create_item(price: int):
     item = {
@@ -67,37 +63,87 @@ def find_item(item_id: str):
 #         mimetype='application/json'
 #     )
 #     return response
-#     # return '', 200
 
 @app.post('/add/<item_id>/<amount>')
 def add_stock(item_id: str, amount: int):
+    # Check if the item exists
+    if not db.exists(item_id):
+        abort(404, description=f"Item with id {item_id} not found")
+
+    # Retrieve the item from the database
+    item_found = json.loads(db.get(item_id))
+    item_found["stock"] = int(item_found["stock"])
+    
+    # Call coordination service to start a new transaction
+    response = requests.post(f"{gateway_url}/start_tx")
+    if response.status_code == 200:
+        conn_id = response.json()["conn_id"]
+        
+        # Update item stock in the transaction context
+        item_found["stock"] += int(amount)
+        db.set(item_id, json.dumps(item_found))
+        
+        # Prepare the transaction in the coordination service
+        response = requests.post(f"{gateway_url}/prepare/{conn_id}")
+        if response.status_code == 200:
+            # Store the updated item stock value
+            db.set(item_id, json.dumps(item_found))
+
+            # Commit the transaction
+            response = requests.post(f"{gateway_url}/commit_tx/{conn_id}")
+            if response.status_code == 200:
+                return {"message": "Stock added successfully"}
+            else:
+                # Handle commit failure
+                return {"error": "Failed to commit transaction"}, 500
+        else:
+            # Handle prepare failure
+            return {"error": "Failed to prepare transaction"}, 500
+    else:
+        # Handle transaction start failure
+        return {"error": "Failed to start transaction"}, 500
+
+
+@app.post('/subtract/<item_id>/<amount>')
+def remove_stock(item_id: str, amount: int):
     # check if the item exists
     if not db.exists(item_id):
         abort(404, description=f"Item with id {item_id} not found")
-    
-    conn_id = requests.post('http://coord-service/start_tx').json().get('conn_id')
-    
-    try:
-        payload = {
-            'command': f'INCRBY {item_id}:stock {amount}'
-        }
-        response = requests.post(f'http://coord-service/exec/{conn_id}', json=payload)
-        if response.status_code != 200:
-            abort(response.status_code, description=response.json().get('error'))
-    except Exception as e:
-        requests.post(f'http://coord-service/cancel_tx/{conn_id}')
-        abort(500, description=str(e))
-    
-    response = requests.post(f'http://coord-service/commit_tx/{conn_id}')
-    if response.status_code != 200:
-        abort(response.status_code, description=response.json().get('error'))
-    
-    return jsonify({
-        "CODE": 200,
-        "message": "Stock added successfully",
-    })
+    # Start the transaction
+    response = requests.post(f"{gateway_url}/start_tx")
+    if response.status_code == 200:
+        conn_id = response.json()["conn_id"]
+        # Get the current item stock value
+        item_found = json.loads(db.get(item_id))
+        item_found["stock"] = int(item_found["stock"])
+        if item_found["stock"] < int(amount):
+            abort(404, description=f"Not enough stock for item with id {item_id}")
+        else:
+            # Decrement the stock by the specified amount
+            item_found["stock"] -= int(amount)
+
+            # Prepare the transaction in the coordination service
+            response = requests.post(f"{gateway_url}/prepare/{conn_id}")
+            if response.status_code == 200:
+                # Store the updated item stock value
+                db.set(item_id, json.dumps(item_found))
+                # Commit the transaction
+                response = requests.post(f"{gateway_url}/commit_tx/{conn_id}")
+                if response.status_code == 200:
+                    return {"message": "Stock removed successfully"}
+                else:
+                    # Handle commit failure
+                    return {"error": "Failed to commit transaction"}, 500
+            else:
+                # Handle prepare failure
+                return {"error": "Failed to prepare transaction"}, 500
+    else:
+        # Handle transaction start failure
+        return {"error": "Failed to start transaction"}, 500
 
 
+
+        
 # @app.post('/subtract/<item_id>/<amount>')
 # def remove_stock(item_id: str, amount: int):
 #     # check if the item exists
@@ -116,116 +162,3 @@ def add_stock(item_id: str, amount: int):
 #         mimetype='application/json'
 #     )
 #     return response
-#         # return {"CODE": 200}
-#         # return {"status_code":200}
-        
-# @app.post('/subtract/<item_id>/<amount>')
-# def remove_stock(item_id: str, amount: int):
-#     # check if the item exists
-#     if not db.exists(item_id):
-#         abort(404, description=f"Item with id {item_id} not found")
-
-#     conn_id = requests.post('http://coord-service/start_tx').json().get('conn_id')
-
-#     try:
-#         current_stock = db.get(f"{item_id}:stock")
-#         if current_stock is None:
-#             abort(404, description=f"Item with id {item_id} has no stock")
-#         current_stock = int(current_stock)
-#         if current_stock < amount:
-#             abort(400, description=f"Not enough stock for item with id {item_id}")
-        
-#         payload = {
-#             'command': f'DECRBY {item_id}:stock {amount}'
-#         }
-#         response = requests.post(f'http://coord-service/exec/{conn_id}', json=payload)
-#         if response.status_code != 200:
-#             abort(response.status_code, description=response.json))
-@app.post('/subtract/<item_id>/<amount>')
-def remove_stock(item_id: str, amount: int):
-    # Check if the item exists
-    if not db.exists(item_id):
-        abort(404, description=f"Item with id {item_id} not found")
-<<<<<<< HEAD
-    item_found = json.loads(db.get(item_id))
-    item_found["stock"] = int(item_found["stock"])
-    if item_found["stock"] < int(amount):
-        abort(404, description=f"Not enough stock for item with id {item_id}")
-    else:
-        item_found["stock"] -= int(amount)
-        db.set(item_id, json.dumps(item_found))
-        response = app.response_class(
-        response="",
-        status=200,
-        mimetype='application/json'
-    )
-    return response
-        # return {"CODE": 200}
-        # return {"status_code":200}
-
-@app.post('/check/<order_id>')
-def check_stock(order_id: str):
-    # check if all thems are available
-    items = dict(request.json)
-
-    for item_id , item_num in items.items():
-        if not db.exists(item_id):
-            abort(404, description=f"Item with id {item_id} not found")
-        item_found = json.loads(db.get(item_id))
-        item_found["stock"] = int(item_found["stock"])
-        if item_found["stock"] < int(item_num):
-            abort(404, description=f"Not enough stock for item with id {item_id}")
-
-    return f"All items are available for order {order_id}"
-
-@app.post('/update/<order_id>')
-def remove_all_stocks(order_id):
-    items = dict(request.json)
-    for item_id , item_num in items.items():
-        remove_stock(item_id, item_num)
-    return f"Order {order_id} is completed"
-
-=======
->>>>>>> 7d54782 (coordinate)
-
-    # Start a transaction with the coordination service
-    coord_response = requests.post('http://coord-service/start_tx')
-    if coord_response.status_code != 200:
-        abort(coord_response.status_code, description=coord_response.json().get('error'))
-    conn_id = coord_response.json().get('conn_id')
-
-    try:
-        # Retrieve the current stock from the database
-        current_stock = db.get(f"{item_id}:stock")
-        if current_stock is None:
-            abort(404, description=f"Item with id {item_id} has no stock")
-        current_stock = int(current_stock)
-
-        # Check if there is enough stock
-        if current_stock < amount:
-            abort(400, description=f"Not enough stock for item with id {item_id}")
-
-        # Prepare the command payload for execution
-        payload = {
-            'command': f'DECRBY {item_id}:stock {amount}'
-        }
-
-        # Execute the command within the transaction
-        exec_response = requests.post(f'http://coord-service/exec/{conn_id}', json=payload)
-        if exec_response.status_code != 200:
-            abort(exec_response.status_code, description=exec_response.json().get('error'))
-
-        # Commit the transaction
-        commit_response = requests.post(f'http://coord-service/commit_tx/{conn_id}')
-        if commit_response.status_code != 200:
-            abort(commit_response.status_code, description=commit_response.json().get('error'))
-
-        # Return the success response
-        return jsonify({
-            "CODE": 200,
-            "message": "Stock removed successfully",
-        })
-    except Exception as e:
-        # Handle errors and cancel the transaction
-        requests.post(f'http://coord-service/cancel_tx/{conn_id}')
-        abort(500, description=str(e))

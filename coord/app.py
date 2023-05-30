@@ -50,7 +50,7 @@ def add_items(conn_id, item_id, count):
     return jsonify(conn_found), 200
 
 @app.post('/add/<conn_id>/<user_id>/<amount>')
-def add_items(conn_id, user_id, amount):
+def add_payment(conn_id, user_id, amount):
     conn_found = json.loads(db.get(conn_id))
     conn_found["pending_payments"].append((user_id, amount))
     db.set(conn_found["conn_id"], json.dumps(conn_found))

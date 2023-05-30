@@ -36,11 +36,6 @@ def create_order(user_id):
     }
     db.set(order["order_id"], json.dumps(order))
 
-    response = app.response_class(
-            response= order,
-            status=200,
-            mimetype='application/json'
-        )
     return jsonify(order), 200
 
 
@@ -168,12 +163,74 @@ def find_order(order_id):
 #     return {"status": "success"}, 200
 
 
+# @app.post('/checkout/<order_id>')
+# def checkout(order_id):
+#     # Check if the order exists
+#     if not db.exists(order_id):
+#         abort(404, description=f"Order with id {order_id} not found")
+
+#     # Retrieve the order from the database
+#     order_found = json.loads(db.get(order_id))
+
+#     if order_found["paid"]:
+#         abort(400, description="Order has already been paid")
+
+#     # Transform list of items into a dictionary
+#     items_count = Counter(order_found["items"])
+
+#     # Call the coordinator service to start a new transaction
+#     response = requests.post(f"{gateway_url}/start_tx")
+#     if response.status_code != 200:
+#         abort(response.status_code, description="Failed to start the transaction")
+
+#     transaction_data = response.json()
+#     conn_id = transaction_data['conn_id']
+
+#     try:
+#         # Call the coordinator service to prepare the transaction
+#         response = requests.post(f"{gateway_url}/prepare/{conn_id}")
+#         if response.status_code != 200:
+#             abort(response.status_code, description="Failed to prepare the transaction")
+#         # Query the stock service to check if the items are available
+#         for item_id, count in items_count.items():
+#             response = requests.get(f"{gateway_url}/stock/find/{item_id}")
+#             if response.status_code != 200:
+#                 abort(response.status_code, description=f"Failed to check stock for item {item_id}")
+#             stock_data = response.json()
+#             if stock_data["stock"] < count:
+#                 abort(400, description=f"Not enough stock for item {item_id}")
+#         # Call the coordinator service to acknowledge the transaction
+#         response = requests.post(f"{gateway_url}/acknowledge/{conn_id}")
+#         if response.status_code != 200:
+#             abort(response.status_code, description="Failed to acknowledge the transaction")
+#         # Query the payment service to process the payment
+#         response = requests.post(f"{gateway_url}/payment/pay/{order_found['user_id']}/{order_id}/{int(order_found['total_cost'])}")
+#         if response.status_code != 200:
+#             abort(response.status_code, description="Payment failed")
+#         # Call the coordinator service to commit the transaction
+#         response = requests.post(f"{gateway_url}/commit_tx/{conn_id}")
+#         if response.status_code != 200:
+#             abort(response.status_code, description="Failed to commit the transaction")
+#         # Update the stock information and order information
+#         for item_id, count in items_count.items():
+#             response = requests.post(f"{gateway_url}/stock/subtract/{item_id}/{count}")
+#             if response.status_code != 200:
+#                 abort(response.status_code, description="Stock update failed")
+#         # Mark the order as paid
+#         order_found["paid"] = True
+#         db.set(order_id, json.dumps(order_found))
+#         return {"status": "success"}, 200
+#     except:
+#         # If any error occurs, cancel the transaction
+#         response = requests.post(f"{gateway_url}/cancel_tx/{conn_id}")
+#         if response.status_code != 200:
+#             abort(response.status_code, description="Failed to cancel the transaction")
+
+#         abort(500, description="Transaction aborted")
+
+
 @app.post('/checkout/<order_id>')
 def checkout(order_id):
-    # Check if the order exists
-    if not db.exists(order_id):
-        abort(404, description=f"Order with id {order_id} not found")
-
     # Retrieve the order from the database
     order_found = json.loads(db.get(order_id))
 
@@ -184,52 +241,38 @@ def checkout(order_id):
     items_count = Counter(order_found["items"])
 
     # Call the coordinator service to start a new transaction
-    response = requests.post(f"{gateway_url}/start_tx")
+    response = requests.post(f"{gateway_url}/coord/start_tx")
     if response.status_code != 200:
         abort(response.status_code, description="Failed to start the transaction")
 
     transaction_data = response.json()
     conn_id = transaction_data['conn_id']
 
-    try:
-        # Call the coordinator service to prepare the transaction
-        response = requests.post(f"{gateway_url}/prepare/{conn_id}")
+    # Update the stock information and order information
+    for item_id, count in items_count.items():
+        response = requests.post(f"{gateway_url}/stock/subtract/{item_id}/{count}")
         if response.status_code != 200:
-            abort(response.status_code, description="Failed to prepare the transaction")
-        # Query the stock service to check if the items are available
-        for item_id, count in items_count.items():
-            response = requests.get(f"{gateway_url}/stock/find/{item_id}")
-            if response.status_code != 200:
-                abort(response.status_code, description=f"Failed to check stock for item {item_id}")
-            stock_data = response.json()
-            if stock_data["stock"] < count:
-                abort(400, description=f"Not enough stock for item {item_id}")
-        # Call the coordinator service to acknowledge the transaction
-        response = requests.post(f"{gateway_url}/acknowledge/{conn_id}")
-        if response.status_code != 200:
-            abort(response.status_code, description="Failed to acknowledge the transaction")
-        # Query the payment service to process the payment
-        response = requests.post(f"{gateway_url}/payment/pay/{order_found['user_id']}/{order_id}/{int(order_found['total_cost'])}")
-        if response.status_code != 200:
-            abort(response.status_code, description="Payment failed")
-        # Call the coordinator service to commit the transaction
-        response = requests.post(f"{gateway_url}/commit_tx/{conn_id}")
-        if response.status_code != 200:
-            abort(response.status_code, description="Failed to commit the transaction")
-        # Update the stock information and order information
-        for item_id, count in items_count.items():
-            response = requests.post(f"{gateway_url}/stock/subtract/{item_id}/{count}")
-            if response.status_code != 200:
-                abort(response.status_code, description="Stock update failed")
-        # Mark the order as paid
-        order_found["paid"] = True
-        db.set(order_id, json.dumps(order_found))
-        return {"status": "success"}, 200
-    except:
-        # If any error occurs, cancel the transaction
-        response = requests.post(f"{gateway_url}/cancel_tx/{conn_id}")
-        if response.status_code != 200:
-            abort(response.status_code, description="Failed to cancel the transaction")
+            requests.post(f"{gateway_url}/coord/cancel_tx/{conn_id}")
 
-        abort(500, description="Transaction aborted")
+        requests.post(f"{gateway_url}/coord/add/{conn_id}/{item_id}/{count}")
+
+    ## Send ready statement
+                
+    # Query the payment service to process the payment
+    response = requests.post(f"{gateway_url}/payment/pay/{order_found['user_id']}/{order_id}/{int(order_found['total_cost'])}")
+    if response.status_code != 200:
+        requests.post(f"{gateway_url}/coord/cancel_tx/{conn_id}")
+
+    requests.post(f"{gateway_url}/coord/add/{conn_id}/{order_found['user_id']}/{int(order_found['total_cost'])}")
+
+    # Call the coordinator service to commit the transaction
+    response = requests.post(f"{gateway_url}/commit_tx/{conn_id}")
+    if response.status_code != 200:
+        abort(response.status_code, description="Failed to commit the transaction")
+    
+    # Mark the order as paid
+    order_found["paid"] = True
+    db.set(order_id, json.dumps(order_found))
+    return jsonify(order_found), 200
+
 

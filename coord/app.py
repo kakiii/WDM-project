@@ -23,10 +23,15 @@ atexit.register(close_db_connection)
 
 @app.post('/start_tx')
 def start_transaction():
-    # conn_id = str(db.incr("transaction_id"))
-    conn_id = str(uuid.uuid4())
-    db.set(conn_id, "PREPARE")
-    return jsonify({'conn_id': conn_id}), 200
+    conn = {
+        "conn_id": uuid.uuid4(),
+        "pending_items": [],
+        "pending_payments": [],
+        "completed": False
+    }
+    db.set(conn["conn_id"], json.dumps(conn))
+
+    return jsonify(conn), 200
 
 @app.get('/status/<conn_id>')
 def get_transaction_status(conn_id):
@@ -36,75 +41,105 @@ def get_transaction_status(conn_id):
         return jsonify({'status': status})
     else:
         return jsonify({'error': 'Invalid connection ID'}), 400
+    
+@app.post('/add/<conn_id>/<item_id>/<count>')
+def add_items(conn_id, item_id, count):
+    conn_found = json.loads(db.get(conn_id))
+    conn_found["pending_items"].append((item_id, count))
+    db.set(conn_found["conn_id"], json.dumps(conn_found))
+    return jsonify(conn_found), 200
 
-@app.post('/prepare/<conn_id>')
-def prepare_transaction(conn_id):
-    if db.exists(conn_id):
-        status = db.get(conn_id).decode('utf-8')
-        if status == "PREPARE":
-            db.set(conn_id, "READY")
-            return jsonify({'message': 'Prepare vote recorded'})
-        else:
-            return jsonify({'error': 'Invalid transaction status'}), 400
-    else:
-        return jsonify({'error': 'Invalid connection ID'}), 400
+@app.post('/add/<conn_id>/<user_id>/<amount>')
+def add_items(conn_id, user_id, amount):
+    conn_found = json.loads(db.get(conn_id))
+    conn_found["pending_payments"].append((user_id, amount))
+    db.set(conn_found["conn_id"], json.dumps(conn_found))
+    return jsonify(conn_found), 200
 
-@app.post('/acknowledge/<conn_id>')
-def acknowledge_transaction(conn_id):
-    if db.exists(conn_id):
-        status = db.get(conn_id).decode('utf-8')
-        if status == "COMMIT":
-            db.set(conn_id, "ACKNOWLEDGED")
-            return jsonify({'message': 'Acknowledgment recorded'})
-        else:
-            return jsonify({'error': 'Invalid transaction status'}), 400
-    else:
-        return jsonify({'error': 'Invalid connection ID'}), 400
+# @app.post('/prepare/<conn_id>')
+# def prepare_transaction(conn_id):
+#     if db.exists(conn_id):
+#         status = db.get(conn_id).decode('utf-8')
+#         if status == "PREPARE":
+#             db.set(conn_id, "READY")
+#             return jsonify({'message': 'Prepare vote recorded'})
+#         else:
+#             return jsonify({'error': 'Invalid transaction status'}), 400
+#     else:
+#         return jsonify({'error': 'Invalid connection ID'}), 400
+
+# @app.post('/acknowledge/<conn_id>')
+# def acknowledge_transaction(conn_id):
+#     if db.exists(conn_id):
+#         status = db.get(conn_id).decode('utf-8')
+#         if status == "COMMIT":
+#             db.set(conn_id, "ACKNOWLEDGED")
+#             return jsonify({'message': 'Acknowledgment recorded'})
+#         else:
+#             return jsonify({'error': 'Invalid transaction status'}), 400
+#     else:
+#         return jsonify({'error': 'Invalid connection ID'}), 400
+    
 
 @app.post('/commit_tx/<conn_id>')
 def commit_transaction(conn_id):
-    if db.exists(conn_id):
-        status = db.get(conn_id).decode('utf-8')
-        if status == "READY" or status == "ACKNOWLEDGED":
-            db.set(conn_id, "COMMIT")
-            # Send commit message to participating services
-            response = requests.post(f"{gateway_url}/order/commit/{conn_id}")
-            if response.status_code == 200:
-                return jsonify({'message': 'Transaction committed successfully'})
-            else:
-                # Handle failure or error case
-                db.set(conn_id, "ABORT")
-                return jsonify({'error': 'Failed to commit transaction'}), 500
-        else:
-            return jsonify({'error': 'Invalid transaction status'}), 400
+    conn_found = json.loads(db.get(conn_id))
+    if conn_found["pending_payments"] != [] and conn_found["pending_items"] != []:
+        conn_found["completed"] = True
+        return jsonify(conn_found), 200
     else:
-        return jsonify({'error': 'Invalid connection ID'}), 400
+        return jsonify(conn_found), 400
 
+# @app.post('/commit_tx/<conn_id>')
+# def commit_transaction(conn_id):
+#     if db.exists(conn_id):
+#         status = db.get(conn_id).decode('utf-8')
+#         if status == "READY" or status == "ACKNOWLEDGED":
+#             db.set(conn_id, "COMMIT")
+#             # Send commit message to participating services
+#             response = requests.post(f"{gateway_url}/order/commit/{conn_id}")
+#             if response.status_code == 200:
+#                 return jsonify({'message': 'Transaction committed successfully'})
+#             else:
+#                 # Handle failure or error case
+#                 db.set(conn_id, "ABORT")
+#                 return jsonify({'error': 'Failed to commit transaction'}), 500
+#         else:
+#             return jsonify({'error': 'Invalid transaction status'}), 400
+#     else:
+#         return jsonify({'error': 'Invalid connection ID'}), 400
+        
+## RETURN ALL THE HOLDINGS
 @app.post('/cancel_tx/<conn_id>')
 def cancel_transaction(conn_id):
-    if db.exists(conn_id):
-        status = db.get(conn_id).decode('utf-8')
-        if status == "READY" or status == "ACKNOWLEDGED":
-            db.set(conn_id, "ABORT")
-            # Send abort message to participating services
-            response = requests.post(f"{gateway_url}/order/cancel/{conn_id}")
-            if response.status_code == 200:
-                return jsonify({'message': 'Transaction cancelled successfully'})
-            else:
-                # Handle failure or error case
-                return jsonify({'error': 'Failed to cancel transaction'}), 500
-        else:
-            return jsonify({'error': 'Invalid transaction status'}), 400
+    conn_found = json.loads(db.get(conn_id))
+
+    # Add back stock level
+    if conn_found["pending_orders"] != []:
+        for item_id, amount in conn_found["pending_orders"]:
+            response = requests.post(f"{gateway_url}/order/add/{item_id}/{amount}")
+        
+        if response.status_code != 200:
+            return jsonify(conn_found), response.status_code
+    
+    if conn_found["pending_payments"] != []:
+        for user_id, amount in conn_found["pending_orders"]:
+            response = requests.post(f"{gateway_url}/payment/add_funds/{user_id}/{amount}")
+        
+        if response.status_code != 200:
+            return jsonify(conn_found), response.status_code
+    
+    return jsonify(conn_found), 200
                            
-@app.post('/exec/<conn_id>')
-# @app.route('/exec/<conn_id>', methods=['POST'])
-def execute_command(conn_id):
-    if db.exists(conn_id):
-        command = requests.json.get('command')
-        db.rpush(f"{conn_id}:commands", command)
-        return jsonify({'message': 'Command executed successfully'})
-    else:
-        return jsonify({'error': 'Invalid connection ID'}), 400
+# @app.post('/exec/<conn_id>')
+# # @app.route('/exec/<conn_id>', methods=['POST'])
+# def execute_command(conn_id):
+#     if db.exists(conn_id):
+#         command = requests.json.get('command')
+#         db.rpush(f"{conn_id}:commands", command)
+#         return jsonify({'message': 'Command executed successfully'})
+#     else:
+#         return jsonify({'error': 'Invalid connection ID'}), 400
 
 # # @app.route('/commit_tx/<conn_id>', methods=['POST'])
 # @app.post('/commit_tx/<conn_id>')

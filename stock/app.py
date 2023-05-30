@@ -77,9 +77,5 @@ def remove_stock(item_id: str, amount: int):
     else:
         item_found["stock"] -= int(amount)
         db.set(item_id, json.dumps(item_found))
-        response = app.response_class(
-        response="",
-        status=200,
-        mimetype='application/json'
-    )
-    return response
+        
+    return jsonify(item_found), 200

@@ -5,6 +5,7 @@ from flask import Flask, abort, jsonify
 import redis
 import json
 import requests
+import uuid
 
 
 app = Flask("stock-service")
@@ -21,7 +22,7 @@ atexit.register(close_db_connection)
 @app.post('/item/create/<price>')
 def create_item(price: int):
     item = {
-        "item_id": db.incr("item_id"),
+        "item_id": str(uuid.uuid4()),
         "price": price,
         "stock": 0
     }

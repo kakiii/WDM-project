@@ -6,7 +6,7 @@ from collections import Counter
 
 from flask import Flask, abort, jsonify
 import redis
-
+import uuid
 
 gateway_url = os.environ['GATEWAY_URL']
 
@@ -28,7 +28,7 @@ atexit.register(close_db_connection)
 @app.post('/create/<user_id>')
 def create_order(user_id):
     order= {
-        "order_id": db.incr("order_id"),
+        "order_id": str(uuid.uuid4()),
         "user_id": user_id,
         "items": [],
         "paid": False,

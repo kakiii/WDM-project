@@ -7,6 +7,7 @@ import json
 import sys
 import os
 import requests
+import uuid
 
 app = Flask("payment-service")
 gateway_url = os.environ['GATEWAY_URL']
@@ -26,7 +27,7 @@ atexit.register(close_db_connection)
 @app.post('/create_user')
 def create_user():
     user= {
-        "user_id": db.incr("user_id"),
+        "user_id": str(uuid.uuid4()),
         "credit": 0,
     }
 

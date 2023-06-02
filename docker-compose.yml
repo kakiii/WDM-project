@@ -49,7 +49,7 @@ services:
     
   coord-service:
     build: ./coord
-    image: user:latest
+    image: coord:latest
     environment:
       - GATEWAY_URL=http://gateway:80
     command: gunicorn -b 0.0.0.0:5000 app:app -w 1 --timeout 10

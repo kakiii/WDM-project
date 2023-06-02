@@ -24,14 +24,21 @@ atexit.register(close_db_connection)
 @app.post('/start_tx')
 def start_transaction():
     conn = {
-        "conn_id": uuid.uuid4(),
+        "conn_id": str(uuid.uuid4()),
         "pending_items": [],
         "pending_payments": [],
         "completed": False
     }
+
     db.set(conn["conn_id"], json.dumps(conn))
 
     return jsonify(conn), 200
+
+# def start_transaction():
+#     # conn_id = str(db.incr("transaction_id"))
+#     conn_id = str(uuid.uuid4())
+#     db.set(conn_id, "PREPARE")
+#     return jsonify({'conn_id': conn_id}), 200
 
 @app.get('/status/<conn_id>')
 def get_transaction_status(conn_id):

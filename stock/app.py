@@ -1,15 +1,13 @@
 import os
 import atexit
 
-from flask import Flask, abort, jsonify
+from flask import Flask, abort, request
 import redis
 import json
-import requests
-import uuid
-
+from collections import Counter
 
 app = Flask("stock-service")
-gateway_url = os.environ['GATEWAY_URL']
+
 db: redis.Redis = redis.Redis(host=os.environ['REDIS_HOST'],
                               port=int(os.environ['REDIS_PORT']),
                               password=os.environ['REDIS_PASSWORD'],
@@ -18,11 +16,15 @@ db: redis.Redis = redis.Redis(host=os.environ['REDIS_HOST'],
 
 def close_db_connection():
     db.close()
+
+
 atexit.register(close_db_connection)
+
+
 @app.post('/item/create/<price>')
 def create_item(price: int):
     item = {
-        "item_id": str(uuid.uuid4()),
+        "item_id": db.incr("item_id"),
         "price": price,
         "stock": 0
     }
@@ -52,33 +54,81 @@ def add_stock(item_id: str, amount: int):
     # check if the item exists
     if not db.exists(item_id):
         abort(404, description=f"Item with id {item_id} not found")
-    item_found = json.loads(db.get(item_id))
-    item_found["stock"] = int(item_found["stock"])
-    item_found["stock"] += int(amount)
-    db.set(item_id, json.dumps(item_found))
-    # return {"CODE": 200}
-    # return {"status_code":200}
-    response = app.response_class(
-        response=item_found,
-        status=200,
-        mimetype='application/json'
-    )
-    return response
+
+    add_stock_lock = db.lock("stock_lock", timeout=0.3)
+    if not add_stock_lock.acquire(blocking=False):
+        abort(409, description="Stock is being updated by another process")
+        
+    try:
+        item_found = json.loads(db.get(item_id))
+        item_found["stock"] = int(item_found["stock"])
+        item_found["stock"] += int(amount)
+        db.set(item_id, json.dumps(item_found))
+        # return {"CODE": 200}
+        # return {"status_code":200}
+        response = app.response_class(
+            response=item_found,
+            status=200,
+            mimetype='application/json'
+        )
+        return response
+        # return '', 200
+    
+    finally:
+        add_stock_lock.release()
+
 
 
 @app.post('/subtract/<item_id>/<amount>')
 def remove_stock(item_id: str, amount: int):
     # check if the item exists
-    # if not db.exists(item_id):
-    #     abort(404, description=f"Item with id {item_id} not found")
+    if not db.exists(item_id):
+        abort(404, description=f"Item with id {item_id} not found")
 
-    item_found = json.loads(db.get(item_id))
-    item_found["stock"] = int(item_found["stock"])
-    if item_found["stock"] < int(amount):
-        return "Not enough stock for item", 404
-        # abort(404, description=f"Not enough stock for item with id {item_id}")
-    else:
-        item_found["stock"] -= int(amount)
-        db.set(item_id, json.dumps(item_found))
-        
-    return jsonify(item_found), 200
+    remove_stock_lock = db.lock("stock_lock", timeout=0.3)
+    if not remove_stock_lock.acquire(blocking=False):
+        abort(409, description="Stock is being updated by another process")
+    
+    try:
+        item_found = json.loads(db.get(item_id))
+        item_found["stock"] = int(item_found["stock"])
+        if item_found["stock"] < int(amount):
+            abort(404, description=f"Not enough stock for item with id {item_id}")
+        else:
+            item_found["stock"] -= int(amount)
+            db.set(item_id, json.dumps(item_found))
+            response = app.response_class(
+            response="",
+            status=200,
+            mimetype='application/json'
+        )
+        return response
+            # return {"CODE": 200}
+            # return {"status_code":200}
+
+    finally: 
+        remove_stock_lock.release()
+
+@app.post('/check/<order_id>')
+def check_stock(order_id: str):
+    # check if all thems are available
+    items = dict(request.json)
+
+    for item_id , item_num in items.items():
+        if not db.exists(item_id):
+            abort(404, description=f"Item with id {item_id} not found")
+        item_found = json.loads(db.get(item_id))
+        item_found["stock"] = int(item_found["stock"])
+        if item_found["stock"] < int(item_num):
+            abort(404, description=f"Not enough stock for item with id {item_id}")
+
+    return f"All items are available for order {order_id}"
+
+@app.post('/update/<order_id>')
+def remove_all_stocks(order_id):
+    items = dict(request.json)
+    for item_id , item_num in items.items():
+        remove_stock(item_id, item_num)
+    return f"Order {order_id} is completed"
+
+

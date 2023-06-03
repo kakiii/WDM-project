@@ -69,12 +69,14 @@ def add_stock(item_id: str, amount: int):
 @app.post('/subtract/<item_id>/<amount>')
 def remove_stock(item_id: str, amount: int):
     # check if the item exists
-    if not db.exists(item_id):
-        abort(404, description=f"Item with id {item_id} not found")
+    # if not db.exists(item_id):
+    #     abort(404, description=f"Item with id {item_id} not found")
+
     item_found = json.loads(db.get(item_id))
     item_found["stock"] = int(item_found["stock"])
     if item_found["stock"] < int(amount):
-        abort(404, description=f"Not enough stock for item with id {item_id}")
+        return "Not enough stock for item", 404
+        # abort(404, description=f"Not enough stock for item with id {item_id}")
     else:
         item_found["stock"] -= int(amount)
         db.set(item_id, json.dumps(item_found))

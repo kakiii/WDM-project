@@ -124,17 +124,17 @@ def cancel_transaction(conn_id):
     # Add back stock level
     if conn_found["pending_items"] != []:
         for item_id, amount in conn_found["pending_items"]:
-            response = requests.post(f"{gateway_url}/order/add/{item_id}/{amount}")
+            response = requests.post(f"{gateway_url}/orders/add/{item_id}/{amount}")
         
-        if response.status_code != 200:
-            return jsonify(conn_found), response.status_code
+            if response.status_code != 200:
+                return "pending item failed", response.status_code
     
     if conn_found["pending_payments"] != []:
         for user_id, amount in conn_found["pending_payments"]:
             response = requests.post(f"{gateway_url}/payment/add_funds/{user_id}/{amount}")
         
         if response.status_code != 200:
-            return jsonify(conn_found), response.status_code
+            return "pending payment failed", response.status_code
     
     return jsonify(conn_found), 200
                            

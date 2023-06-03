@@ -252,8 +252,9 @@ def checkout(order_id):
     for item_id, count in items_count.items():
         response = requests.post(f"{gateway_url}/stock/subtract/{item_id}/{count}")
         if response.status_code != 200:
-            requests.post(f"{gateway_url}/coord/cancel_tx/{conn_id}")
-            abort(response.status_code, description="Item not available in checkout transaction")
+            res = requests.post(f"{gateway_url}/coord/cancel_tx/{conn_id}")
+            # return res.content, res.status_code
+            return "Item not available in checkout", res.status_code
 
         requests.post(f"{gateway_url}/coord/add/{conn_id}/{item_id}/{count}")
 
@@ -262,8 +263,9 @@ def checkout(order_id):
     # Query the payment service to process the payment
     response = requests.post(f"{gateway_url}/payment/pay/{order_found['user_id']}/{order_id}/{int(order_found['total_cost'])}")
     if response.status_code != 200:
-        requests.post(f"{gateway_url}/coord/cancel_tx/{conn_id}")
-        abort(response.status_code, description="User's wallet not sufficient in checkout transaction")
+        res = requests.post(f"{gateway_url}/coord/cancel_tx/{conn_id}")
+        return "Item not available in checkout", res.status_code
+        # abort(response.status_code, description="User's wallet not sufficient in checkout transaction")
 
     requests.post(f"{gateway_url}/coord/add/{conn_id}/{order_found['user_id']}/{int(order_found['total_cost'])}")
 

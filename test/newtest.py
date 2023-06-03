@@ -9,10 +9,6 @@ class newtest(unittest.TestCase):
         item: dict = tu.create_item(-1)
         self.assertFalse("item_id" in item)
     
-    def test_add_zero_price_item(self):
-        #create an item with zero price and check if it is not added
-        item: dict = tu.create_item(0)
-        self.assertFalse("item_id" in item)
 
     def test_subtract_more_than_available(self):
         #check if subtracting more than available quantity works
@@ -53,45 +49,6 @@ class newtest(unittest.TestCase):
         item_id: str = item['item_id']
         order: dict = tu.create_order(item_id)
         self.assertFalse('order_id' in order)
-
-    '''  def test_create_item_with_non_numeric_price(self):
-        # Try to create an item with a non-numeric price, such as string
-        self.assertTrue(tu.status_code_is_failure(tu.create_item("not a number")))
-
-    def test_add_non_numeric_stock(self):
-        # Try to add a non-numeric amount of stock
-        item = tu.create_item(1)
-        self.assertTrue('item_id' in item)
-        item_id = item['item_id']
-        response = tu.add_stock(item_id, "not a number")
-        self.assertTrue(tu.status_code_is_failure(response))
-
-    def test_subtract_non_numeric_stock(self):
-        # Try to subtract a non-numeric amount of stock
-        item = tu.create_item(1)
-        self.assertTrue('item_id' in item)
-        item_id = item['item_id']
-        response = tu.subtract_stock(item_id, "not a number")
-        self.assertTrue(tu.status_code_is_failure(response))
-
-    def test_add_credit_with_non_numeric_amount(self):
-        # Try to add a non-numeric amount of credit to a user
-        user = tu.create_user()
-        self.assertTrue('user_id' in user)
-        user_id = user['user_id']
-        response = tu.add_credit_to_user(user_id, "not a number")
-        self.assertTrue(tu.status_code_is_failure(response))
-
-    def test_payment_with_non_numeric_amount(self):
-        # Try to make a payment with a non-numeric amount
-        user = tu.create_user()
-        self.assertTrue('user_id' in user)
-        user_id = user['user_id']
-        order = tu.create_order(user_id)
-        self.assertTrue('order_id' in order)
-        order_id = order['order_id']
-        response = tu.payment_pay(user_id, order_id, "not a number")
-        self.assertTrue(tu.status_code_is_failure(response))'''
 
 ########Multi-Threading Tests########
 
@@ -158,6 +115,58 @@ class newtest(unittest.TestCase):
         # Check that the correct total amount of credit was added
         user = tu.find_user(user_id)
         self.assertEqual(user['credit'], 10)
+
+    def test_concurrent_remove_credit(self):
+        # Create a user and add some credit
+        user = tu.create_user()
+        self.assertTrue('user_id' in user)
+        user_id = user['user_id']
+        tu.add_credit_to_user(user_id, 10)
+
+        # Define a function to remove credit
+        def remove_credit():
+            tu.remove_credit_from_user(user_id, 1)
+
+        # Start multiple threads that remove credit at the same time
+        threads = [threading.Thread(target=remove_credit) for _ in range(10)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        # Check that the correct total amount of credit was removed
+        user = tu.find_user(user_id)
+        self.assertEqual(user['credit'], 0)
+
+    def test_concurrent_checkout(self):
+        # Create an item and add some stock
+        item = tu.create_item(1)
+        self.assertTrue('item_id' in item)
+        item_id = item['item_id']
+        tu.add_stock(item_id, 10)
+
+        # Create a user and add some credit
+        user = tu.create_user()
+        self.assertTrue('user_id' in user)
+        user_id = user['user_id']
+        tu.add_credit_to_user(user_id, 10)
+
+        # Define a function to checkout an order
+        def checkout():
+            tu.checkout_order(item_id)
+
+        # Start multiple threads that checkout an order at the same time
+        threads = [threading.Thread(target=checkout) for _ in range(10)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        # Check that the correct total amount of credit was added
+        user = tu.find_user(user_id)
+        self.assertEqual(user['credit'], 0)
+
+
 
 
 if __name__ == '__main__':

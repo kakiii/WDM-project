@@ -56,17 +56,24 @@ def add_credit(user_id: str, amount: int):
         # abort(404, description=f"User with id {user_id} not found")
         return jsonify({"done": False}), 404
     
-    # retrieve the user from the database
-    user_found = json.loads(db.get(user_id))
+    user_lock = db.lock(user_id, blocking_timeout=0.3)
+    if not user_lock.acquire(blocking=False):
+        return jsonify({"user_lock is blocking": False}), 409
+    try:
+        # retrieve the user from the database
+        user_found = json.loads(db.get(user_id))
 
-    # Update the user amount in the dict
-    user_found["credit"] = float(user_found["credit"]) + float(amount)
+        # Update the user amount in the dict
+        user_found["credit"] = float(user_found["credit"]) + float(amount)
 
-    # Update the database
-    db.set(user_found["user_id"], json.dumps(user_found))
+        # Update the database
+        db.set(user_found["user_id"], json.dumps(user_found))
 
-    # return the user information using dictionary unpacking
-    return jsonify({"done": True}), 200
+        # return the user information using dictionary unpacking
+        return jsonify({"done": True}), 200
+    
+    finally:
+        user_lock.release()
 
 ### Do i need to check that this order id belongs to the user id?
 @app.post('/pay/<user_id>/<order_id>/<amount>')
@@ -78,6 +85,7 @@ def remove_credit(user_id: str, order_id: str, amount: int):
         # retrieve the user from the database
         user_found = json.loads(db.get(user_id))
 
+<<<<<<< Updated upstream
     # Check if order exists
     order_response = requests.get(f"{gateway_url}/orders/find/{order_id}")
 
@@ -93,8 +101,34 @@ def remove_credit(user_id: str, order_id: str, amount: int):
 
     # Update the database
     db.set(user_found["user_id"], json.dumps(user_found))
+=======
+    user_lock = db.lock(user_id, blocking_timeout=0.3)
+    if not user_lock.acquire(blocking=False):
+        return jsonify({"user_lock is blocking": False}), 409
+>>>>>>> Stashed changes
     
-    return jsonify(user_found), 200
+    try:
+
+        # Check if order exists
+        # order_response = requests.get(f"{gateway_url}/orders/find/{order_id}")
+
+        # if order_response.status_code != 200:
+        #     abort(order_response.status_code, description=f"Order {order_id} not found")
+
+        # Check if user has sufficient amount to deduct
+        if float(user_found['credit']) < float(amount):
+            abort(400, description=f"User with id {user_id} does not have sufficient amount to be deducted")
+
+        # Update the user amount in the dict
+        user_found["credit"] = int(float(user_found["credit"]) - float(amount))
+
+        # Update the database
+        db.set(user_id, json.dumps(user_found))
+        
+        return jsonify(user_found), 200
+
+    finally:
+        user_lock.release()
 
 @app.post('/cancel/<user_id>/<order_id>')
 def cancel_payment(user_id: str, order_id: str):

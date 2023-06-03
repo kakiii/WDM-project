@@ -119,6 +119,7 @@ def find_order(order_id):
     return jsonify(order_found), 200
 
 
+<<<<<<< Updated upstream
 # @app.post('/checkout/<order_id>')
 # def checkout(order_id):
 #     # Check if the order exists
@@ -278,5 +279,49 @@ def checkout(order_id):
     order_found["paid"] = True
     db.set(order_id, json.dumps(order_found))
     return jsonify(order_found), 200
+=======
+@app.post('/checkout/<order_id>')
+def checkout(order_id:str):
+    # Check if the order exists
+    if not db.exists(order_id):
+        abort(404, description=f"Order with id {order_id} not found")
+    #Set lock on the order
+    order_lock = db.lock(order_id)
+    if order_lock.acquire(blocking=True):
+        abort(409, description=f"Order with id {order_id} is being processed")
+
+    try:
+        # Retrieve the order from the database
+        order_found = json.loads(db.get(order_id))
+
+        if order_found["paid"]:
+            return "Order has already been paid", 400
+
+        items_count = Counter(order_found["items"])
+
+        resp = requests.post(f"{gateway_url}/stock/check/{order_id}", json=items_count)
+
+        if resp.status_code != 200:
+            return "Stock check failed", 400
+        
+        # call payment service
+        user_id, amount = str(order_found["user_id"]), int(order_found["total_cost"])
+        resp = requests.post(f"{gateway_url}/payment/pay/{user_id}/{order_id}/{amount}")
+        if resp.status_code != 200:
+            abort(400, description="Payment failed")
+
+        # update stocks in stock service
+        resp = requests.post(f"{gateway_url}/stock/update/{order_id}", json=items_count)
+        if resp.status_code != 200:
+            return "Stock update failed", 400
+        
+        # update order status
+        order_found["paid"] = True
+        db.set(order_id, json.dumps(order_found))
+
+        return f"Order {order_id} paid successfully", 200
+    finally:
+        order_lock.release()
+>>>>>>> Stashed changes
 
 

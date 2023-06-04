@@ -9,7 +9,9 @@ from flask import Flask, abort, jsonify
 import redis
 
 
-gateway_url = os.environ['GATEWAY_URL']
+# gateway_url = os.environ['GATEWAY_URL']
+stock_service = os.environ['STOCK_SERVICE_URL']
+payment_service = os.environ['USER_SERVICE_URL']
 
 app = Flask("order-service")
 
@@ -76,7 +78,7 @@ def add_item(order_id:str, item_id):
 
 
     # update total cost
-    item_price = int(requests.get(f"{gateway_url}/stock/find/{item_id}").json()["price"])
+    item_price = int(requests.get(f"{stock_service}/find/{item_id}").json()["price"])
     order_found["total_cost"] += item_price
     db.set(order_id, json.dumps(order_found))
 
@@ -100,7 +102,7 @@ def remove_item(order_id, item_id):
     else:
         order_found["items"].remove(item_id)
         # update total cost
-        item_price = int(requests.get(f"{gateway_url}/stock/find/{item_id}").json()["price"])
+        item_price = int(requests.get(f"{stock_service}/find/{item_id}").json()["price"])
         order_found["total_cost"] -= item_price
         db.set(order_id, json.dumps(order_found))
 
@@ -144,19 +146,19 @@ def checkout(order_id:str):
 
     items_count = Counter(order_found["items"])
 
-    resp = requests.post(f"{gateway_url}/stock/check/{order_id}", json=items_count)
+    resp = requests.post(f"{stock_service}/check/{order_id}", json=items_count)
 
     if resp.status_code != 200:
         return "Stock check failed", 400
     
     # call payment service
     user_id, amount = str(order_found["user_id"]), int(order_found["total_cost"])
-    resp = requests.post(f"{gateway_url}/payment/pay/{user_id}/{order_id}/{amount}")
+    resp = requests.post(f"{payment_service}/pay/{user_id}/{order_id}/{amount}")
     if resp.status_code != 200:
         abort(400, description="Payment failed")
 
     # update stocks in stock service
-    resp = requests.post(f"{gateway_url}/stock/update/{order_id}", json=items_count)
+    resp = requests.post(f"{payment_service}/stock/update/{order_id}", json=items_count)
     if resp.status_code != 200:
         return "Stock update failed", 400
     

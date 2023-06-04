@@ -9,7 +9,9 @@ import os
 import requests
 
 app = Flask("payment-service")
-gateway_url = os.environ['GATEWAY_URL']
+# gateway_url = os.environ['GATEWAY_URL']
+order_service = os.environ['ORDER_SERVICE_URL']
+
 db: redis.Redis = redis.Redis(host=os.environ['REDIS_HOST'],
                               port=int(os.environ['REDIS_PORT']),
                               password=os.environ['REDIS_PASSWORD'],
@@ -105,7 +107,7 @@ def cancel_payment(user_id: str, order_id: str):
         user_found = json.loads(db.get(user_id))
     
     # Check if order exists
-    order_response = requests.get(f"{gateway_url}/orders/find/{order_id}")
+    order_response = requests.get(f"{order_service}/find/{order_id}")
 
     if order_response.status_code != 200:
         abort(order_response.status_code, description=order_response.json()['message'])
@@ -122,7 +124,7 @@ def cancel_payment(user_id: str, order_id: str):
 @app.post('/status/<user_id>/<order_id>')
 def payment_status(user_id: str, order_id: str):
     # Check if order exists
-    order_response = requests.get(f"{gateway_url}/orders/find/{order_id}")
+    order_response = requests.get(f"{order_service}find/{order_id}")
 
     if order_response.status_code != 200:
         abort(order_response.status_code, description=order_response.json()['message'])

@@ -53,28 +53,34 @@ def find_user(user_id: str):
 def add_credit(user_id: str, amount: int):
     # Check if user exists
     if not db.exists(user_id):
-        # abort(404, description=f"User with id {user_id} not found")
         return jsonify({"done": False}), 404
-    
-    add_credit_lock = db.lock(user_id,blocking_timeout=1)
-    if not add_credit_lock.acquire(blocking=False):
-        return jsonify({"done": False}), 409
 
-    try:
-        # retrieve the user from the database
-        user_found = json.loads(db.get(user_id))
+    # Set lock on the user with a prefixed lock name
+    add_credit_lock = db.lock(f'add_credit_lock:{user_id}')
 
-        # Update the user amount in the dict
-        user_found["credit"] = float(user_found["credit"]) + float(amount)
+    if add_credit_lock.acquire():
+        try:
+            # retrieve the user from the database
+            user_found = json.loads(db.get(user_id))
 
-        # Update the database
-        db.set(user_found["user_id"], json.dumps(user_found))
+            # Update the user amount in the dict
+            user_found["credit"] = float(user_found["credit"]) + float(amount)
 
-        # return the user information using dictionary unpacking
-        return jsonify({"done": True}), 200
+            # Update the database
+            db.set(user_id, json.dumps(user_found))
 
-    finally:
-        add_credit_lock.release()
+            return jsonify({"done": True}), 200
+        except Exception as e:
+            add_credit_lock.release()
+            # Handle exception and possibly return a relevant response or re-raise the exception
+            return jsonify({"done": False, "error": "Internal Server Error"}), 500
+        finally:
+            # Ensure the lock is always released
+            add_credit_lock.release()
+    else:
+        # Handle the case where the lock was not successfully acquired
+        return jsonify({"done": False, "error": "Service Unavailable: Could not acquire lock"}), 503
+
 
 ### Do i need to check that this order id belongs to the user id?
 @app.post('/pay/<user_id>/<order_id>/<amount>')
@@ -86,31 +92,37 @@ def remove_credit(user_id: str, order_id: str, amount: int):
         # retrieve the user from the database
         user_found = json.loads(db.get(user_id))
 
-    remove_credit_lock = db.lock(user_id,blocking_timeout=0.3)
-    if not remove_credit_lock.acquire(blocking=False):
-        return jsonify({"done": False}), 409
-    
-    try:
-        # Check if order exists
-        order_response = requests.get(f"{gateway_url}/orders/find/{order_id}")
+    remove_credit_lock = db.lock(f'remove_credit_lock:{user_id}')
+    if remove_credit_lock.acquire():
+        try:
+            # Check if order exists
+            order_response = requests.get(f"{gateway_url}/orders/find/{order_id}")
 
-        if order_response.status_code != 200:
-            abort(order_response.status_code, description=order_response.json()['message'])
+            if order_response.status_code != 200:
+                abort(order_response.status_code, description=order_response.json()['message'])
 
-        # Check if user has sufficient amount to deduct
-        if float(user_found['credit']) < float(amount):
-            abort(400, description=f"User with id {user_id} does not have sufficient amount to be deducted")
+            # Check if user has sufficient amount to deduct
+            if float(user_found['credit']) < float(amount):
+                abort(400, description=f"User with id {user_id} does not have sufficient amount to be deducted")
 
-        # Update the user amount in the dict
-        user_found["credit"] = float(user_found["credit"]) - float(amount)
+            # Update the user amount in the dict
+            user_found["credit"] = float(user_found["credit"]) - float(amount)
 
-        # Update the database
-        db.set(user_found["user_id"], json.dumps(user_found))
+            # Update the database
+            db.set(user_id, json.dumps(user_found))
+
+            return jsonify(user_found), 200   
         
-        return jsonify(user_found), 200
-    
-    finally:
-        remove_credit_lock.release()
+        except Exception as e:
+            remove_credit_lock.release()
+            # Handle exception here
+            abort(500, description="Internal Server Error")
+        finally:
+            remove_credit_lock.release()
+    else:
+        abort(503, description="Service Unavailable: Could not acquire lock")
+
+
 
 @app.post('/cancel/<user_id>/<order_id>')
 def cancel_payment(user_id: str, order_id: str):
@@ -121,7 +133,7 @@ def cancel_payment(user_id: str, order_id: str):
         # retrieve the user from the database
         user_found = json.loads(db.get(user_id))
     
-    payment_lock = db.lock(user_id,blocking_timeout=0.3)
+    payment_lock = db.lock(user_id)
     if not payment_lock.acquire(blocking=False):
         return jsonify({"done": False}), 409
     

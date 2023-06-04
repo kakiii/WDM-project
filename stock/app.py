@@ -55,7 +55,7 @@ def add_stock(item_id: str, amount: int):
     if not db.exists(item_id):
         abort(404, description=f"Item with id {item_id} not found")
 
-    add_stock_lock = db.lock("stock_lock", timeout=0.3)
+    add_stock_lock = db.lock("stock_lock", blocking_timeout=0.3)
     if not add_stock_lock.acquire(blocking=False):
         abort(409, description="Stock is being updated by another process")
         

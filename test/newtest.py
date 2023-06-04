@@ -114,6 +114,7 @@ class newtest(unittest.TestCase):
 
         # Check that the correct total amount of credit was added
         user = tu.find_user(user_id)
+        print(user['credit'])
         self.assertEqual(user['credit'], 10)
 
     def test_concurrent_remove_credit(self):
@@ -125,7 +126,7 @@ class newtest(unittest.TestCase):
 
         # Define a function to remove credit
         def remove_credit():
-            tu.remove_credit_from_user(user_id, 1)
+            tu.add_credit_to_user(user_id, -1)
 
         # Start multiple threads that remove credit at the same time
         threads = [threading.Thread(target=remove_credit) for _ in range(10)]

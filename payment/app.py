@@ -56,7 +56,7 @@ def add_credit(user_id: str, amount: int):
         # abort(404, description=f"User with id {user_id} not found")
         return jsonify({"done": False}), 404
     
-    add_credit_lock = db.lock(user_id,blocking_timeout=0.3)
+    add_credit_lock = db.lock(user_id,blocking_timeout=1)
     if not add_credit_lock.acquire(blocking=False):
         return jsonify({"done": False}), 409
 
@@ -86,7 +86,7 @@ def remove_credit(user_id: str, order_id: str, amount: int):
         # retrieve the user from the database
         user_found = json.loads(db.get(user_id))
 
-    remove_credit_lock = db.lock(user_id,blocking=0.3)
+    remove_credit_lock = db.lock(user_id,blocking_timeout=0.3)
     if not remove_credit_lock.acquire(blocking=False):
         return jsonify({"done": False}), 409
     
@@ -121,20 +121,29 @@ def cancel_payment(user_id: str, order_id: str):
         # retrieve the user from the database
         user_found = json.loads(db.get(user_id))
     
-    # Check if order exists
-    order_response = requests.get(f"{gateway_url}/orders/find/{order_id}")
-
-    if order_response.status_code != 200:
-        abort(order_response.status_code, description=order_response.json()['message'])
-    else:
-        order_found = order_response.json()
+    payment_lock = db.lock(user_id,blocking_timeout=0.3)
+    if not payment_lock.acquire(blocking=False):
+        return jsonify({"done": False}), 409
     
-    # Refund money back to the user
-    user_found["credit"] += order_found["total_cost"]
+    try:
 
-    data = user_found.update(order_found)
+        # Check if order exists
+        order_response = requests.get(f"{gateway_url}/orders/find/{order_id}")
 
-    return jsonify(data), 200
+        if order_response.status_code != 200:
+            abort(order_response.status_code, description=order_response.json()['message'])
+        else:
+            order_found = order_response.json()
+        
+        # Refund money back to the user
+        user_found["credit"] += order_found["total_cost"]
+
+        data = user_found.update(order_found)
+
+        return jsonify(data), 200
+    
+    finally:
+        payment_lock.release()
 
 @app.post('/status/<user_id>/<order_id>')
 def payment_status(user_id: str, order_id: str):

@@ -34,32 +34,27 @@ def start_transaction():
 
     return jsonify(conn), 200
 
-# def start_transaction():
-#     # conn_id = str(db.incr("transaction_id"))
-#     conn_id = str(uuid.uuid4())
-#     db.set(conn_id, "PREPARE")
-#     return jsonify({'conn_id': conn_id}), 200
-
-@app.get('/status/<conn_id>')
+@app.get('/find/<conn_id>')
 def get_transaction_status(conn_id):
     if db.exists(conn_id):
-        status = db.get(conn_id).decode('utf-8')
-        status = db.get(conn_id)
-        return jsonify({'status': status})
+        conn_found = json.loads(db.get(conn_id))
+        return jsonify(conn_found), 200
     else:
         return jsonify({'error': 'Invalid connection ID'}), 400
     
-@app.post('/add/<conn_id>/<item_id>/<count>')
+@app.post('/addItem/<conn_id>/<item_id>/<count>')
 def add_items(conn_id, item_id, count):
     conn_found = json.loads(db.get(conn_id))
     conn_found["pending_items"].append((item_id, count))
+
     db.set(conn_found["conn_id"], json.dumps(conn_found))
     return jsonify(conn_found), 200
 
-@app.post('/add/<conn_id>/<user_id>/<amount>')
+@app.post('/addPayment/<conn_id>/<user_id>/<amount>')
 def add_payment(conn_id, user_id, amount):
     conn_found = json.loads(db.get(conn_id))
     conn_found["pending_payments"].append((user_id, amount))
+
     db.set(conn_found["conn_id"], json.dumps(conn_found))
     return jsonify(conn_found), 200
 

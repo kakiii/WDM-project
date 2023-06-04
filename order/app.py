@@ -113,12 +113,6 @@ def find_order(order_id:str):
     # retrieve the order from the database
     order_found = json.loads(db.get(order_id))
     
-    # return the order information using dictionary unpacking
-    response = app.response_class(
-            response=json.dumps(order_found),
-            status=200,
-            mimetype='application/json'
-        )
     return jsonify(order_found), 200
 
 
@@ -258,23 +252,27 @@ def checkout(order_id):
             res = requests.post(f"{gateway_url}/coord/cancel_tx/{conn_id}")
             return res.content, response.status_code
 
-        requests.post(f"{gateway_url}/coord/add/{conn_id}/{item_id}/{count}")
+        add_res = requests.post(f"{gateway_url}/coord/addItem/{conn_id}/{item_id}/{count}")
+
+        if add_res.status_code != 200:
+            return "hi", 200
 
     ## Send ready statement
                 
     # Query the payment service to process the payment
     response = requests.post(f"{gateway_url}/payment/pay/{order_found['user_id']}/{order_id}/{int(order_found['total_cost'])}")
     if response.status_code != 200:
-        res = requests.post(f"{gateway_url}/coord/cancel_tx/{conn_id}")
-        return "Cash not available in checkout", res.status_code
-        # abort(response.status_code, description="User's wallet not sufficient in checkout transaction")
-
-    requests.post(f"{gateway_url}/coord/add/{conn_id}/{order_found['user_id']}/{int(order_found['total_cost'])}")
+        requests.post(f"{gateway_url}/coord/cancel_tx/{conn_id}")
+        return "Cash not available in checkout", response.status_code
+    else:
+        requests.post(f"{gateway_url}/coord/addPayment/{conn_id}/{order_found['user_id']}/{int(order_found['total_cost'])}")
+        
 
     # Call the coordinator service to commit the transaction
-    response = requests.post(f"{gateway_url}/commit_tx/{conn_id}")
+    response = requests.post(f"{gateway_url}/coord/commit_tx/{conn_id}")
     if response.status_code != 200:
-        abort(response.status_code, description="Failed to commit the transaction")
+        res = requests.get(f"{gateway_url}/coord/find/{conn_id}")
+        return "Failed to commit the transaction", response.status_code
     
     # Mark the order as paid
     order_found["paid"] = True

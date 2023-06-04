@@ -27,7 +27,7 @@ def start_transaction():
         "conn_id": str(uuid.uuid4()),
         "pending_items": [],
         "pending_payments": [],
-        "completed": False
+        "status": "Pending",
     }
 
     db.set(conn["conn_id"], json.dumps(conn))
@@ -92,7 +92,7 @@ def add_payment(conn_id, user_id, amount):
 def commit_transaction(conn_id):
     conn_found = json.loads(db.get(conn_id))
     if conn_found["pending_payments"] != [] and conn_found["pending_items"] != []:
-        conn_found["completed"] = True
+        conn_found["status"] = "Completed"
         return jsonify(conn_found), 200
     else:
         return jsonify(conn_found), 400
@@ -124,8 +124,8 @@ def cancel_transaction(conn_id):
     # Add back stock level
     if conn_found["pending_items"] != []:
         for item_id, amount in conn_found["pending_items"]:
-            response = requests.post(f"{gateway_url}/orders/add/{item_id}/{amount}")
-        
+            response = requests.post(f"{gateway_url}/stock/add/{item_id}/{amount}")
+
             if response.status_code != 200:
                 return "pending item failed", response.status_code
     
@@ -136,6 +136,9 @@ def cancel_transaction(conn_id):
         if response.status_code != 200:
             return "pending payment failed", response.status_code
     
+    conn_found["status"] = "Cancelled"
+    db.set(conn_found["conn_id"], json.dumps(conn_found))
+
     return jsonify(conn_found), 200
                            
 # @app.post('/exec/<conn_id>')

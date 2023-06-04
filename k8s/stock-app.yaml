@@ -28,11 +28,12 @@ spec:
       containers:
         - name: stock
           image: stock:latest
+          imagePullPolicy: Never
           resources:
             limits:
               memory: "1Gi"
               cpu: "1"
-            requests:
+            requests:kubectl get pods
               memory: "1Gi"
               cpu: "1"
           command: ["gunicorn"]

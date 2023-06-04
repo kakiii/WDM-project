@@ -78,15 +78,9 @@ def remove_credit(user_id: str, order_id: str, amount: int):
         # retrieve the user from the database
         user_found = json.loads(db.get(user_id))
 
-    # Check if order exists
-    order_response = requests.get(f"{gateway_url}/orders/find/{order_id}")
-
-    if order_response.status_code != 200:
-        abort(order_response.status_code, description=order_response.json()['message'])
-
     # Check if user has sufficient amount to deduct
     if float(user_found['credit']) < float(amount):
-        abort(400, description=f"User with id {user_id} does not have sufficient amount to be deducted")
+        return "User do not have sufficient amount", 400
 
     # Update the user amount in the dict
     user_found["credit"] = float(user_found["credit"]) - float(amount)

@@ -58,31 +58,6 @@ def add_payment(conn_id, user_id, amount):
     db.set(conn_found["conn_id"], json.dumps(conn_found))
     return jsonify(conn_found), 200
 
-# @app.post('/prepare/<conn_id>')
-# def prepare_transaction(conn_id):
-#     if db.exists(conn_id):
-#         status = db.get(conn_id).decode('utf-8')
-#         if status == "PREPARE":
-#             db.set(conn_id, "READY")
-#             return jsonify({'message': 'Prepare vote recorded'})
-#         else:
-#             return jsonify({'error': 'Invalid transaction status'}), 400
-#     else:
-#         return jsonify({'error': 'Invalid connection ID'}), 400
-
-# @app.post('/acknowledge/<conn_id>')
-# def acknowledge_transaction(conn_id):
-#     if db.exists(conn_id):
-#         status = db.get(conn_id).decode('utf-8')
-#         if status == "COMMIT":
-#             db.set(conn_id, "ACKNOWLEDGED")
-#             return jsonify({'message': 'Acknowledgment recorded'})
-#         else:
-#             return jsonify({'error': 'Invalid transaction status'}), 400
-#     else:
-#         return jsonify({'error': 'Invalid connection ID'}), 400
-    
-
 @app.post('/commit_tx/<conn_id>')
 def commit_transaction(conn_id):
     conn_found = json.loads(db.get(conn_id))
@@ -92,26 +67,7 @@ def commit_transaction(conn_id):
     else:
         return jsonify(conn_found), 400
 
-# @app.post('/commit_tx/<conn_id>')
-# def commit_transaction(conn_id):
-#     if db.exists(conn_id):
-#         status = db.get(conn_id).decode('utf-8')
-#         if status == "READY" or status == "ACKNOWLEDGED":
-#             db.set(conn_id, "COMMIT")
-#             # Send commit message to participating services
-#             response = requests.post(f"{gateway_url}/order/commit/{conn_id}")
-#             if response.status_code == 200:
-#                 return jsonify({'message': 'Transaction committed successfully'})
-#             else:
-#                 # Handle failure or error case
-#                 db.set(conn_id, "ABORT")
-#                 return jsonify({'error': 'Failed to commit transaction'}), 500
-#         else:
-#             return jsonify({'error': 'Invalid transaction status'}), 400
-#     else:
-#         return jsonify({'error': 'Invalid connection ID'}), 400
-        
-## RETURN ALL THE HOLDINGS
+
 @app.post('/cancel_tx/<conn_id>')
 def cancel_transaction(conn_id):
     conn_found = json.loads(db.get(conn_id))
@@ -135,45 +91,4 @@ def cancel_transaction(conn_id):
     db.set(conn_found["conn_id"], json.dumps(conn_found))
 
     return jsonify(conn_found), 200
-                           
-# @app.post('/exec/<conn_id>')
-# # @app.route('/exec/<conn_id>', methods=['POST'])
-# def execute_command(conn_id):
-#     if db.exists(conn_id):
-#         command = requests.json.get('command')
-#         db.rpush(f"{conn_id}:commands", command)
-#         return jsonify({'message': 'Command executed successfully'})
-#     else:
-#         return jsonify({'error': 'Invalid connection ID'}), 400
-
-# # @app.route('/commit_tx/<conn_id>', methods=['POST'])
-# @app.post('/commit_tx/<conn_id>')
-# def commit_transaction(conn_id):
-#     if db.exists(conn_id):
-#         db.rpush(f"{conn_id}:commands", "COMMIT")
-#         db.delete(conn_id)
-#         return jsonify({'message': 'Transaction committed successfully'})
-#     else:
-#         return jsonify({'error': 'Invalid connection ID'}), 400
-# @app.post('/cancel_tx/<conn_id>')
-# # @app.route('/cancel_tx/<conn_id>', methods=['POST'])
-# def cancel_transaction(conn_id):
-#     if db.exists(conn_id):
-#         db.rpush(f"{conn_id}:commands", "ROLLBACK")
-#         db.delete(conn_id)
-#         return jsonify({'message': 'Transaction cancelled successfully'})
-#     else:
-#         return jsonify({'error': 'Invalid connection ID'}), 400
-
-# @app.route('/find/<item_id>', methods=['GET'])
-# def find_item(item_id):
-#     if not db.exists(item_id):
-#         abort(404, description=f"Item with id {item_id} not found")
-
-#     item_found = db.get(item_id).decode('utf-8')
-#     item_found = json.loads(item_found)
-#     item_found["price"] = float(item_found["price"])
-#     item_found["stock"] = int(item_found["stock"])
-
-#     return jsonify({'CODE': 200, **item_found})
 

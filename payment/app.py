@@ -68,7 +68,7 @@ def add_credit(user_id: str, amount: int):
     db.set(user_found["user_id"], json.dumps(user_found))
 
     # return the user information using dictionary unpacking
-    return jsonify({"done": True}), 200
+    return jsonify(user_found), 200
 
 ### Do i need to check that this order id belongs to the user id?
 @app.post('/pay/<user_id>/<order_id>/<amount>')

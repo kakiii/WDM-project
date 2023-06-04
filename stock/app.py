@@ -28,10 +28,7 @@ def create_item(price: int):
     }
 
     db.set(item["item_id"], json.dumps(item))
-    return {
-        "CODE": 200,
-        "item_id": item["item_id"],
-    }
+    return jsonify(item), 200
 
 @app.get('/find/<item_id>')
 def find_item(item_id: str):
@@ -43,7 +40,7 @@ def find_item(item_id: str):
     item_found["price"]= float(item_found["price"])
     item_found["stock"]= int(item_found["stock"])
     # return the item information using dictionary unpacking
-    return {"CODE": 200, **item_found}
+    return jsonify(item_found), 200
     
 
 
@@ -56,27 +53,16 @@ def add_stock(item_id: str, amount: int):
     item_found["stock"] = int(item_found["stock"])
     item_found["stock"] += int(amount)
     db.set(item_id, json.dumps(item_found))
-    # return {"CODE": 200}
-    # return {"status_code":200}
-    response = app.response_class(
-        response=item_found,
-        status=200,
-        mimetype='application/json'
-    )
-    return response
+   
+    return jsonify(item_found), 200
 
 
 @app.post('/subtract/<item_id>/<amount>')
 def remove_stock(item_id: str, amount: int):
-    # check if the item exists
-    # if not db.exists(item_id):
-    #     abort(404, description=f"Item with id {item_id} not found")
-
     item_found = json.loads(db.get(item_id))
     item_found["stock"] = int(item_found["stock"])
     if item_found["stock"] < int(amount):
         return "Not enough stock for item", 404
-        # abort(404, description=f"Not enough stock for item with id {item_id}")
     else:
         item_found["stock"] -= int(amount)
         db.set(item_id, json.dumps(item_found))

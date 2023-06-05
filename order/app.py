@@ -2,13 +2,17 @@ import os
 import atexit
 import json
 import requests
+from uuid import uuid4
 from collections import Counter
 
 from flask import Flask, abort, jsonify
 import redis
 import uuid
 
-gateway_url = os.environ['GATEWAY_URL']
+# gateway_url = os.environ['GATEWAY_URL']
+stock_service = os.environ['STOCK_SERVICE_URL']
+payment_service = os.environ['USER_SERVICE_URL']
+
 
 app = Flask("order-service")
 
@@ -26,7 +30,7 @@ atexit.register(close_db_connection)
 
 
 @app.post('/create/<user_id>')
-def create_order(user_id):
+def create_order(user_id:str):
     order= {
         "order_id": str(uuid.uuid4()),
         "user_id": user_id,
@@ -40,7 +44,7 @@ def create_order(user_id):
 
 
 @app.delete('/remove/<order_id>')
-def remove_order(order_id):
+def remove_order(order_id:str):
     # check if the order exists
     if not db.exists(order_id):
         abort(404, description=f"Order with id {order_id} not found")
@@ -58,7 +62,7 @@ def remove_order(order_id):
 
 
 @app.post('/addItem/<order_id>/<item_id>')
-def add_item(order_id, item_id):
+def add_item(order_id:str, item_id):
     # check if the order exists
     if not db.exists(order_id):
         abort(404, description=f"Order with id {order_id} not found")
@@ -67,7 +71,7 @@ def add_item(order_id, item_id):
     order_found["items"].append(item_id)
 
     # update total cost
-    item_price = requests.get(f"{gateway_url}/stock/find/{item_id}").json()["price"]
+    item_price = int(requests.get(f"{stock_service}/find/{item_id}").json()["price"])
     order_found["total_cost"] += item_price
     db.set(order_id, json.dumps(order_found))
 
@@ -86,14 +90,14 @@ def remove_item(order_id, item_id):
     else:
         order_found["items"].remove(item_id)
         # update total cost
-        item_price = requests.get(f"{gateway_url}/stock/find/{item_id}").json()["price"]
+        item_price = int(requests.get(f"{stock_service}/find/{item_id}").json()["price"])
         order_found["total_cost"] -= item_price
         db.set(order_id, json.dumps(order_found))
 
         return jsonify(order_found), 200
 
 @app.get('/find/<order_id>')
-def find_order(order_id):
+def find_order(order_id:str):
     # check if the order exists
     if not db.exists(order_id):
         abort(404, description=f"Order with id {order_id} not found")

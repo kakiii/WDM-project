@@ -45,6 +45,8 @@ spec:
               value: "user-service"
             - name: STOCK_SERVICE_URL
               value: "stock-service"
+            - name: COORD_SERVICE_URL
+              value: "coord-service"
             - name: REDIS_HOST
               value: redis-master
             - name: REDIS_PORT

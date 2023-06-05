@@ -9,7 +9,7 @@ import uuid
 
 
 app = Flask("stock-service")
-gateway_url = os.environ['GATEWAY_URL']
+# gateway_url = os.environ['GATEWAY_URL']
 db: redis.Redis = redis.Redis(host=os.environ['REDIS_HOST'],
                               port=int(os.environ['REDIS_PORT']),
                               password=os.environ['REDIS_PASSWORD'],

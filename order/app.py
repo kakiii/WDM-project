@@ -16,9 +16,6 @@ payment_service = os.environ['USER_SERVICE_URL']
 coord_service = os.environ['COORD_SERVICE_URL']
 
 
-stock_service = os.environ['GATEWAY_URL']
-payment_service = os.environ['GATEWAY_URL']
-
 app = Flask("order-service")
 
 db: redis.Redis = redis.Redis(host=os.environ['REDIS_HOST'],

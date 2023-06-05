@@ -115,44 +115,51 @@ def checkout(order_id):
     if order_found["paid"]:
         abort(400, description="Order has already been paid")
 
-    # Transform list of items into a dictionary
-    items_count = Counter(order_found["items"])
+    checkout_lock = db.lock("checkout_lock", timeout=10)
+    if checkout_lock.acquire():
+        try:
+            # Transform list of items into a dictionary
+            items_count = Counter(order_found["items"])
 
-    # Call the coordinator service to start a new transaction
-    response = requests.post(f"{coord_service}/start_tx")
-    if response.status_code != 200:
-        abort(response.status_code, description="Failed to start the transaction")
+            # Call the coordinator service to start a new transaction
+            response = requests.post(f"{coord_service}/start_tx")
+            if response.status_code != 200:
+                abort(response.status_code, description="Failed to start the transaction")
 
-    transaction_data = response.json()
-    conn_id = transaction_data['conn_id']
+            transaction_data = response.json()
+            conn_id = transaction_data['conn_id']
 
-    # Update the stock information and order information
-    for item_id, count in items_count.items():
-        response = requests.post(f"{stock_service}subtract/{item_id}/{count}")
-        if response.status_code != 200:
-            res = requests.post(f"{coord_service}/cancel_tx/{conn_id}")
-            return res.content, response.status_code
+            # Update the stock information and order information
+            for item_id, count in items_count.items():
+                response = requests.post(f"{stock_service}subtract/{item_id}/{count}")
+                if response.status_code != 200:
+                    res = requests.post(f"{coord_service}/cancel_tx/{conn_id}")
+                    return res.content, response.status_code
 
-        requests.post(f"{coord_service}/coord/addItem/{conn_id}/{item_id}/{count}")
+                requests.post(f"{coord_service}/coord/addItem/{conn_id}/{item_id}/{count}")
+                        
+            # Query the payment service to process the payment
+            response = requests.post(f"{payment_service}/pay/{order_found['user_id']}/{order_id}/{int(order_found['total_cost'])}")
+            if response.status_code != 200:
+                requests.post(f"{coord_service}/cancel_tx/{conn_id}")
+                return "Cash not available in checkout", response.status_code
+            else:
+                requests.post(f"{coord_service}/addPayment/{conn_id}/{order_found['user_id']}/{int(order_found['total_cost'])}")
                 
-    # Query the payment service to process the payment
-    response = requests.post(f"{payment_service}/pay/{order_found['user_id']}/{order_id}/{int(order_found['total_cost'])}")
-    if response.status_code != 200:
-        requests.post(f"{coord_service}/cancel_tx/{conn_id}")
-        return "Cash not available in checkout", response.status_code
-    else:
-        requests.post(f"{coord_service}/addPayment/{conn_id}/{order_found['user_id']}/{int(order_found['total_cost'])}")
-        
 
-    # Call the coordinator service to commit the transaction
-    response = requests.post(f"{coord_service}/commit_tx/{conn_id}")
-    if response.status_code != 200:
-        res = requests.get(f"{coord_service}/find/{conn_id}")
-        return "Failed to commit the transaction", response.status_code
-    
-    # Mark the order as paid
-    order_found["paid"] = True
-    db.set(order_id, json.dumps(order_found))
-    return jsonify(order_found), 200
+            # Call the coordinator service to commit the transaction
+            response = requests.post(f"{coord_service}/commit_tx/{conn_id}")
+            if response.status_code != 200:
+                res = requests.get(f"{coord_service}/find/{conn_id}")
+                return "Failed to commit the transaction", response.status_code
+            
+            # Mark the order as paid
+            order_found["paid"] = True
+            db.set(order_id, json.dumps(order_found))
+            return jsonify(order_found), 200
+        except Exception as e:
+            return "Exception occured", 400
+        finally:
+            checkout_lock.release()
 
 

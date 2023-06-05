@@ -13,6 +13,7 @@ import uuid
 stock_service = os.environ['STOCK_SERVICE_URL']
 payment_service = os.environ['USER_SERVICE_URL']
 
+
 app = Flask("order-service")
 
 db: redis.Redis = redis.Redis(host=os.environ['REDIS_HOST'],

@@ -30,3 +30,10 @@ spec:
               name: user-service
               port:
                 number: 5000
+        - path: /coord/?(.*)
+          pathType: Prefix
+          backend:
+            service:
+              name: coord-service
+              port:
+                number: 5000

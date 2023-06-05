@@ -10,7 +10,9 @@ import redis
 
 
 app = Flask("coord-service")
-gateway_url = os.environ['GATEWAY_URL']
+# gateway_url = os.environ['GATEWAY_URL']
+stock_service = os.environ['STOCK_SERVICE_URL']
+payment_service = os.environ['PAYMENT_SERVICE_URL']
 
 db: redis.Redis = redis.Redis(host=os.environ['REDIS_HOST'],
                               port=int(os.environ['REDIS_PORT']),
@@ -75,14 +77,14 @@ def cancel_transaction(conn_id):
     # Add back stock level
     if conn_found["pending_items"] != []:
         for item_id, amount in conn_found["pending_items"]:
-            response = requests.post(f"{gateway_url}/stock/add/{item_id}/{amount}")
+            response = requests.post(f"stock_service/add/{item_id}/{amount}")
 
             if response.status_code != 200:
                 return "pending item failed", response.status_code
     
     if conn_found["pending_payments"] != []:
         for user_id, amount in conn_found["pending_payments"]:
-            response = requests.post(f"{gateway_url}/payment/add_funds/{user_id}/{amount}")
+            response = requests.post(f"payment_service/add_funds/{user_id}/{amount}")
         
             if response.status_code != 200:
                 return "pending payment failed", response.status_code

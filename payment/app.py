@@ -11,8 +11,8 @@ import uuid
 
 app = Flask("payment-service")
 # gateway_url = os.environ['GATEWAY_URL']
-# order_service = os.environ['ORDER_SERVICE_URL']
-order_service = os.environ['GATEWAY_URL']
+order_service = os.environ['ORDER_SERVICE_URL']
+# order_service = os.environ['GATEWAY_URL']
 
 db: redis.Redis = redis.Redis(host=os.environ['REDIS_HOST'],
                               port=int(os.environ['REDIS_PORT']),

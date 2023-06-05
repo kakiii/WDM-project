@@ -84,8 +84,8 @@ def cancel_transaction(conn_id):
         for user_id, amount in conn_found["pending_payments"]:
             response = requests.post(f"{gateway_url}/payment/add_funds/{user_id}/{amount}")
         
-        if response.status_code != 200:
-            return "pending payment failed", response.status_code
+            if response.status_code != 200:
+                return "pending payment failed", response.status_code
     
     conn_found["status"] = "Cancelled"
     db.set(conn_found["conn_id"], json.dumps(conn_found))

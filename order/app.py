@@ -10,9 +10,11 @@ import redis
 import uuid
 
 # gateway_url = os.environ['GATEWAY_URL']
-stock_service = os.environ['STOCK_SERVICE_URL']
-payment_service = os.environ['USER_SERVICE_URL']
+# stock_service = os.environ['STOCK_SERVICE_URL']
+# payment_service = os.environ['USER_SERVICE_URL']
 
+stock_service = os.environ['GATEWAY_URL']
+payment_service = os.environ['GATEWAY_URL']
 
 app = Flask("order-service")
 
@@ -71,7 +73,8 @@ def add_item(order_id:str, item_id):
     order_found["items"].append(item_id)
 
     # update total cost
-    item_price = int(requests.get(f"{stock_service}/find/{item_id}").json()["price"])
+    response = requests.get(f"{stock_service}/stock/find/{item_id}")
+    item_price = response.json()["price"]
     order_found["total_cost"] += item_price
     db.set(order_id, json.dumps(order_found))
 
@@ -90,7 +93,7 @@ def remove_item(order_id, item_id):
     else:
         order_found["items"].remove(item_id)
         # update total cost
-        item_price = int(requests.get(f"{stock_service}/find/{item_id}").json()["price"])
+        item_price = int(requests.get(f"{stock_service}/stock/find/{item_id}").json()["price"])
         order_found["total_cost"] -= item_price
         db.set(order_id, json.dumps(order_found))
 

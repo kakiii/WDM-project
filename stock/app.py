@@ -46,13 +46,25 @@ def find_item(item_id: str):
 
 @app.post('/add/<item_id>/<amount>')
 def add_stock(item_id: str, amount: int):
+
+    stock_lock = db.lock("stock_lock", timeout=10)
+
     # check if the item exists
     if not db.exists(item_id):
+        stock_lock.release()
         abort(404, description=f"Item with id {item_id} not found")
+    
     item_found = json.loads(db.get(item_id))
-    item_found["stock"] = int(item_found["stock"])
-    item_found["stock"] += int(amount)
-    db.set(item_id, json.dumps(item_found))
+
+    if stock_lock.acquire():
+        try:
+            item_found["stock"] = int(item_found["stock"])
+            item_found["stock"] += int(amount)
+            db.set(item_id, json.dumps(item_found))
+        except Exception as e:
+            return "Exception at add stock occured", 400
+        finally:
+            stock_lock.release()
    
     return jsonify(item_found), 200
 
@@ -60,11 +72,21 @@ def add_stock(item_id: str, amount: int):
 @app.post('/subtract/<item_id>/<amount>')
 def remove_stock(item_id: str, amount: int):
     item_found = json.loads(db.get(item_id))
+
+    stock_lock = db.lock("stock_lock", timeout=10)
+
     item_found["stock"] = int(item_found["stock"])
     if item_found["stock"] < int(amount):
+        stock_lock.release()
         return "Not enough stock for item", 404
-    else:
-        item_found["stock"] -= int(amount)
-        db.set(item_id, json.dumps(item_found))
+    
+    if stock_lock.acquire():
+        try:
+            item_found["stock"] -= int(amount)
+            db.set(item_id, json.dumps(item_found))
+        except Exception as e:
+            return "Exception at remove stock occured", 400
+        finally:
+            stock_lock.release()
         
     return jsonify(item_found), 200

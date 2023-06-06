@@ -114,10 +114,18 @@ def checkout(order_id):
     # Retrieve the order from the database
     order_found = json.loads(db.get(order_id))
 
-    if order_found["paid"]:
-        abort(400, description="Order has already been paid")
-
     checkout_lock = db.lock("checkout_lock", timeout=10)
+
+    if order_found["paid"]:
+        checkout_lock.release()
+        abort(400, description="Order has already been paid")
+    
+    # Check if the order is empty
+    if not order_found["items"]:
+        checkout_lock.release()
+        abort(400, description="Order has no items")
+
+    
     if checkout_lock.acquire():
         try:
             # Transform list of items into a dictionary
@@ -126,6 +134,7 @@ def checkout(order_id):
             # Call the coordinator service to start a new transaction
             response = requests.post(f"{coord_service}/start_tx")
             if response.status_code != 200:
+                checkout_lock.release()
                 abort(response.status_code, description="Failed to start the transaction")
 
             transaction_data = response.json()
@@ -136,6 +145,7 @@ def checkout(order_id):
                 response = requests.post(f"{stock_service}subtract/{item_id}/{count}")
                 if response.status_code != 200:
                     res = requests.post(f"{coord_service}/cancel_tx/{conn_id}")
+                    checkout_lock.release()
                     return res.content, response.status_code
 
                 requests.post(f"{coord_service}/coord/addItem/{conn_id}/{item_id}/{count}")
@@ -144,6 +154,7 @@ def checkout(order_id):
             response = requests.post(f"{payment_service}/pay/{order_found['user_id']}/{order_id}/{int(order_found['total_cost'])}")
             if response.status_code != 200:
                 requests.post(f"{coord_service}/cancel_tx/{conn_id}")
+                checkout_lock.release()
                 return "Cash not available in checkout", response.status_code
             else:
                 requests.post(f"{coord_service}/addPayment/{conn_id}/{order_found['user_id']}/{int(order_found['total_cost'])}")
@@ -152,7 +163,7 @@ def checkout(order_id):
             # Call the coordinator service to commit the transaction
             response = requests.post(f"{coord_service}/commit_tx/{conn_id}")
             if response.status_code != 200:
-                res = requests.get(f"{coord_service}/find/{conn_id}")
+                checkout_lock.release()
                 return "Failed to commit the transaction", response.status_code
             
             # Mark the order as paid

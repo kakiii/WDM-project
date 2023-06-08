@@ -70,13 +70,16 @@ def add_item(order_id:str, item_id):
         abort(404, description=f"Order with id {order_id} not found")
 
     order_found = json.loads(db.get(order_id))
-    order_found["items"].append(item_id)
+    new_items = order_found["items"]
+    new_items.append(item_id)
+    order_found["items"] = new_items
 
     # update total cost
-    response = requests.get(f"{stock_service}/stock/find/{item_id}")
-    item_price = response.json()["price"]
-    order_found["total_cost"] += item_price
-    db.set(order_id, json.dumps(order_found))
+    response = requests.get(f"{stock_service}/find/{item_id}")
+    if response.status_code == 200:
+        item_price = int(response.json()["price"])
+        order_found["total_cost"] += item_price
+        db.set(order_id, json.dumps(order_found))
 
     return jsonify(order_found), 200
 
@@ -93,7 +96,7 @@ def remove_item(order_id, item_id):
     else:
         order_found["items"].remove(item_id)
         # update total cost
-        item_price = int(requests.get(f"{stock_service}/stock/find/{item_id}").json()["price"])
+        item_price = int(requests.get(f"{stock_service}/find/{item_id}").json()["price"])
         order_found["total_cost"] -= item_price
         db.set(order_id, json.dumps(order_found))
 
